@@ -1,0 +1,3 @@
+﻿  macro.cpp
+C:\Users\aa\Desktop\macro\macro\macro\macro.cpp(85,34): warning C4101: 'e' :참조되지 않은 지역 변수입니다.
+  macro.vcxproj -> C:\Users\aa\Desktop\macro\macro\x64\Debug\macro.exe
