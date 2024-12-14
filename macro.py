@@ -24,6 +24,17 @@ def press_key_with_duration(key, duration):
     pyautogui.keyUp(key)
     print(f"{key} 매크로 중지")
 
+
+def debuff_macro(key):
+    """지정된 키를 누르고 있는 동안 →와 Enter를 반복적으로 실행."""
+    print(f"{key} 매크로 실행 중...")
+    while keyboard.is_pressed(key):  # 해당 키가 눌린 상태인지 확인
+        pyautogui.press('left')
+        time.sleep(0.01)
+        pyautogui.press('enter')
+        time.sleep(0.01)
+    print(f"{key} 매크로 중지")
+
 def bomu_macro():
     """보무 매크로: 5번 + Home + Enter, 6번 + Home + Enter"""
     print("보무 매크로 실행 중...")
@@ -165,13 +176,13 @@ def main():
 
             if key_macro_active:  # 매크로가 활성화 상태일 때만 실행
                 if keyboard.is_pressed('7'):
-                    press_key_with_duration('7', 3)
+                    debuff_macro('7')
 
                 if keyboard.is_pressed('1'):
-                    press_key_with_duration('1', 3)
+                    debuff_macro('1')
 
                 if keyboard.is_pressed('9'):
-                    press_key_with_duration('9', 3)
+                    debuff_macro('9')
 
                 if keyboard.is_pressed('5'):
                     bomu_macro()
