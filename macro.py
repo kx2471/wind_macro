@@ -16,22 +16,44 @@ auto_macro_thread = None
 macro_ai_process = None  # macro_ai.py 프로세스 핸들러
 
 def read_detected_text():
-    """3초마다 텍스트 파일을 읽고 '마,' '력'을 포함하면 Ctrl + Z를 누름"""
+    """5초마다 텍스트 파일을 읽고 '마,' '력'을 포함하면 Ctrl + Z를 한 번만 실행"""
+    last_processed_text = ""  # 마지막으로 처리된 텍스트를 저장하는 변수
+    last_action_time = 0  # 마지막으로 실행된 시간을 추적
+
     while True:
-        try:
-            with open("detected_text.txt", "r", encoding="utf-8") as file:
-                text = file.read()
-                # '마' 또는 '력'이 포함되어 있는지 확인
-                if '마' in text or '력' in text:
-                    pyautogui.keyDown('ctrl')
-                    pyautogui.press('z')  # Ctrl + Z 누르기
-                    pyautogui.keyUp('ctrl')
-                    print("마 또는 력이 감지되어 Ctrl + Z 누름")
-        except Exception as e:
-            
-            print(f"텍스트 파일 읽기 오류: {e}")
-        
-        time.sleep(3)  # 1초마다 텍스트 파일 읽기
+        if auto_macro_active:  # auto_macro_active가 True일 때만 실행
+            try:
+                with open("detected_text.txt", "r", encoding="utf-8") as file:
+                    # 텍스트 파일 읽기
+                    text = file.read()
+                    # 공백, 줄바꿈, 띄어쓰기 제거하여 한 줄로 처리
+                    normalized_text = ''.join(text.split())  
+
+                    # 마지막 실행 이후 5초가 지나고 텍스트가 변경되었을 경우에만 실행
+                    current_time = time.time()
+                    if (current_time - last_action_time >= 5 and 
+                        normalized_text != last_processed_text):
+
+                        last_processed_text = normalized_text  # 처리한 텍스트 업데이트                        
+                        last_action_time = current_time  # 마지막 실행 시간 업데이트
+
+                        # '마' 또는 '력'이 포함되어 있는지 확인
+                        if '마력' in normalized_text:
+                            pyautogui.keyDown('ctrl')
+                            pyautogui.press('z')  # Ctrl + Z 누르기
+                            pyautogui.keyUp('ctrl')
+                            print(normalized_text)
+                            print("마 또는 력이 감지되어 Ctrl + Z 누름")
+
+            except Exception as e:
+                print(f"텍스트 파일 읽기 오류: {e}")
+
+            time.sleep(0.1)  # 짧은 대기 후 다시 확인
+        else:
+            time.sleep(1)  # auto_macro_active가 False일 때는 1초 대기 후 다시 확인
+
+
+
 
 def start_macro_ai():
     """macro_ai.py 스크립트 실행"""
@@ -133,11 +155,11 @@ def auto_macro():
             heal_auto()
             heal_auto()
             pyautogui.press('3')            
-            time.sleep(0.75)  # 0.5초 딜레이 추가
+            time.sleep(0.75)  # 0.75초 딜레이 추가
             pyautogui.press('3')
-            time.sleep(0.75)  # 0.5초 딜레이 추가
+            time.sleep(0.75)
             pyautogui.press('3')
-            time.sleep(0.75)  # 0.5초 딜레이 추가
+            time.sleep(0.75)
             pyautogui.press('4')
             heal_auto()
             heal_auto()
