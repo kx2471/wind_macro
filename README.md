@@ -10,9 +10,11 @@
 2번 힐 타겟팅 나에게 바꾸기
 
 
-* 주의사항
-  *![image](https://github.com/user-attachments/assets/d6149da1-5353-4ae2-a283-fe38f15c0e4a) 이 이미지에서 '마력' 이라는 글자를 추출하여 ctrl + z키로 마나물약을 먹게 됩니다.
-  *xy.py 스크립트를 이용하여 해당 칸의 좌표를 bbox 좌표에 넣으세요. (설정 되어 있는 값은 1920 * 1024)
+  * 주의사항
+    
+  ![image](https://github.com/user-attachments/assets/d6149da1-5353-4ae2-a283-fe38f15c0e4a)  
+   이 이미지에서 '마력' 이라는 글자를 추출하여 ctrl + z키로 마나물약을 먹게 됩니다.  
+   * xy.py 스크립트를 이용하여 해당 칸의 좌표를 bbox 좌표에 넣으세요. (설정 되어 있는 값은 1920 * 1024)
   
 
   
