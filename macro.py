@@ -31,7 +31,7 @@ def read_detected_text():
 
                     # 마지막 실행 이후 5초가 지나고 텍스트가 변경되었을 경우에만 실행
                     current_time = time.time()
-                    if (current_time - last_action_time >= 5 and 
+                    if (current_time - last_action_time >= 3 and 
                         normalized_text != last_processed_text):
 
                         last_processed_text = normalized_text  # 처리한 텍스트 업데이트                        
@@ -43,7 +43,7 @@ def read_detected_text():
                             pyautogui.press('z')  # Ctrl + Z 누르기
                             pyautogui.keyUp('ctrl')
                             print(normalized_text)
-                            print("마 또는 력이 감지되어 Ctrl + Z 누름")
+                            print("마력이 부족하여 Ctrl + Z")
 
             except Exception as e:
                 print(f"텍스트 파일 읽기 오류: {e}")

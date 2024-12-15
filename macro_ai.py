@@ -42,7 +42,7 @@ def main():
         detected_text = detect_text(screenshot)      
         
         # 1초 대기 후 다음 캡처 진행
-        time.sleep(3)  # 1초 간격으로 계속 실행 (원하는 간격에 맞게 조정 가능)
+        time.sleep(3)  # 3초 간격으로 계속 실행 (원하는 간격에 맞게 조정 가능)
 
 if __name__ == "__main__":
     main()
