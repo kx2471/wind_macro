@@ -9,7 +9,7 @@ pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tessera
 
 def capture_screen():
     """게임 화면에서 특정 영역을 캡처합니다."""
-    bbox = (139, 656, 1758, 785)  # 캡처할 화면 영역 (좌측 상단, 우측 하단)
+    bbox = (1395, 656, 1758, 785)  # 캡처할 화면 영역 (좌측 상단, 우측 하단)
     screen = ImageGrab.grab(bbox)
     
     # 스크린샷 파일로 저장 (디버깅 용)

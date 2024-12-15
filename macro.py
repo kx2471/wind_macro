@@ -15,42 +15,58 @@ auto_macro_active = False
 auto_macro_thread = None
 macro_ai_process = None  # macro_ai.py 프로세스 핸들러
 
+read_detected_text_thread = None  # read_detected_text 스레드 핸들러
+
+def start_read_detected_text():
+    """텍스트 파일 읽기 스레드를 시작합니다."""
+    global read_detected_text_thread
+    
+    # 기존 스레드가 실행 중이면 종료 대기
+    if read_detected_text_thread is not None and read_detected_text_thread.is_alive():
+        print("기존 텍스트 읽기 스레드 종료 중...")
+        stop_read_detected_text()
+        read_detected_text_thread.join()
+        print("기존 텍스트 읽기 스레드 종료 완료")
+
+    # 새 스레드 시작
+    read_detected_text_thread = threading.Thread(target=read_detected_text)
+    read_detected_text_thread.daemon = True
+    read_detected_text_thread.start()
+    print("텍스트 읽기 스레드 시작")
+
+def stop_read_detected_text():
+    """텍스트 파일 읽기 스레드를 중지합니다."""
+    global auto_macro_active
+    auto_macro_active = False
+
 def read_detected_text():
-    """5초마다 텍스트 파일을 읽고 '마,' '력'을 포함하면 Ctrl + Z를 한 번만 실행"""
+    """3초마다 텍스트 파일을 읽고 '마' 또는 '력'을 포함하면 Ctrl + Z를 한 번만 실행."""
     last_processed_text = ""  # 마지막으로 처리된 텍스트를 저장하는 변수
-    last_action_time = 0  # 마지막으로 실행된 시간을 추적
 
-    while True:
-        if auto_macro_active:  # auto_macro_active가 True일 때만 실행
-            try:
-                with open("detected_text.txt", "r", encoding="utf-8") as file:
-                    # 텍스트 파일 읽기
-                    text = file.read()
-                    # 공백, 줄바꿈, 띄어쓰기 제거하여 한 줄로 처리
-                    normalized_text = ''.join(text.split())  
+    while auto_macro_active:
+        try:
+            with open("detected_text.txt", "r", encoding="utf-8") as file:
+                # 텍스트 파일 읽기
+                text = file.read()
+                normalized_text = ''.join(text.split())  # 공백 제거
 
-                    # 마지막 실행 이후 5초가 지나고 텍스트가 변경되었을 경우에만 실행
-                    current_time = time.time()
-                    if (current_time - last_action_time >= 3 and 
-                        normalized_text != last_processed_text):
+                # 파일 내용이 변경된 경우 실행
+                if normalized_text != last_processed_text:
+                    last_processed_text = normalized_text  # 처리한 텍스트 업데이트
 
-                        last_processed_text = normalized_text  # 처리한 텍스트 업데이트                        
-                        last_action_time = current_time  # 마지막 실행 시간 업데이트
+                    # '마력'이 포함되어 있는지 확인
+                    if '마력' in normalized_text:
+                        pyautogui.keyDown('ctrl')
+                        pyautogui.press('z')  # Ctrl + Z 누르기
+                        pyautogui.keyUp('ctrl')
+                        print(normalized_text)
+                        print("마력이 부족하여 Ctrl + Z")
+        except Exception as e:
+            print(f"텍스트 파일 읽기 오류: {e}")
 
-                        # '마' 또는 '력'이 포함되어 있는지 확인
-                        if '마력' in normalized_text:
-                            pyautogui.keyDown('ctrl')
-                            pyautogui.press('z')  # Ctrl + Z 누르기
-                            pyautogui.keyUp('ctrl')
-                            print(normalized_text)
-                            print("마력이 부족하여 Ctrl + Z")
+        # 3초 대기 후 다시 읽기 (파일 갱신 주기와 동기화)
+        time.sleep(3)
 
-            except Exception as e:
-                print(f"텍스트 파일 읽기 오류: {e}")
-
-            time.sleep(0.1)  # 짧은 대기 후 다시 확인
-        else:
-            time.sleep(1)  # auto_macro_active가 False일 때는 1초 대기 후 다시 확인
 
 
 
@@ -123,78 +139,71 @@ def heal_auto():
 def auto_macro():
     """자동 사냥 매크로 동작"""
     print("자동 사냥 매크로 시작")
-    last_bomu_time = time.time() - 100 # 시작할 때 보무 매크로가 실행되도록 초기화
-    last_posion_time = time.time() - 20 # 중독 쿨타임15초 반복실행변수
+    last_bomu_time = time.time() - 50  # 시작할 때 보무 매크로가 실행되도록 초기화
+    last_posion_time = time.time() - 15  # 중독 쿨타임 15초로 초기화
 
     while auto_macro_active:  # auto_macro_active 상태를 확인
-
         current_time = time.time()
 
-        
         # 보무 매크로 실행 조건
-        if current_time - last_bomu_time >= 100:
-            bomu_macro()           
+        if current_time - last_bomu_time >= 50:
+            bomu_macro()
             last_bomu_time = current_time  # 보무 매크로 실행 시간 갱신
 
-        # 중간에 상태를 다시 확인
-        if not auto_macro_active:
-            break
-
-        # 반복 동작 전에 추가할 작업
-        if current_time - last_posion_time >= 20:    
-            press_key_with_duration('1', 3)  # 1번 키로 2초 동안 실행
-            last_posion_time = current_time
+        # 중독 매크로 실행 조건
+        if current_time - last_posion_time >= 15:
+            press_key_with_duration('1', 3)  # 1번 키를 3초 동안 누름
+            last_posion_time = current_time  # 중독 실행 시간 갱신
 
         if not auto_macro_active:
             break
 
-        # for문 안에서 auto_macro_active 상태를 반복적으로 확인하도록 수정
-        for _ in range(5):  # 다음 동작을 5회 반복
-            if not auto_macro_active:
-                break  # auto_macro_active가 False이면 반복문 종료
-            heal_auto()
-            heal_auto()
-            pyautogui.press('3')            
-            time.sleep(0.75)  # 0.75초 딜레이 추가
-            pyautogui.press('3')
-            time.sleep(0.75)
-            pyautogui.press('3')
-            time.sleep(0.75)
-            pyautogui.press('4')
-            heal_auto()
-            heal_auto()
-            heal_auto()
-            heal_auto()
-            pyautogui.press('4')
-            heal_auto()
-            heal_auto()
-            heal_auto()
+        # 반복 동작
+        heal_auto()
+        heal_auto()
+        pyautogui.press('3')
+        time.sleep(0.75)
+        pyautogui.press('3')
+        time.sleep(0.75)
+        pyautogui.press('3')
+        time.sleep(0.75)
+        pyautogui.press('4')
+        heal_auto()
+        heal_auto()
+        heal_auto()
+        heal_auto()
+        heal_auto()
+        pyautogui.press('4')
+        heal_auto()
+        heal_auto()
+        heal_auto()
+        heal_auto()
+        heal_auto()
 
     print("자동 사냥 매크로 종료")
+
 
 def start_auto_macro():
     """자동 매크로를 스레드로 실행"""
     global auto_macro_thread
 
-    # 기존 스레드가 실행 중이면 종료 상태를 설정
+    # 기존 자동 매크로 스레드 종료
     if auto_macro_thread is not None and auto_macro_thread.is_alive():
         print("기존 자동 매크로 스레드 종료 중...")
         global auto_macro_active
         auto_macro_active = False
-        auto_macro_thread.join()  # 기존 스레드가 종료되길 기다림
+        auto_macro_thread.join()
         print("기존 자동 매크로 스레드 종료 완료")
 
-    # 새 스레드 시작
+    # 새 자동 매크로 스레드 시작
     auto_macro_active = True
     auto_macro_thread = threading.Thread(target=auto_macro)
     auto_macro_thread.daemon = True
     auto_macro_thread.start()
     print("자동 매크로 즉시 시작")
 
-    # 텍스트 파일을 읽어들이는 스레드 시작
-    text_reader_thread = threading.Thread(target=read_detected_text)
-    text_reader_thread.daemon = True
-    text_reader_thread.start()
+    # 텍스트 파일 읽기 스레드 시작
+    start_read_detected_text()
 
     # macro_ai.py 스크립트 실행
     start_macro_ai()
