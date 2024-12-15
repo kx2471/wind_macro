@@ -1,7 +1,9 @@
 import keyboard
+
 import pyautogui
 import time
 import threading
+import subprocess
 
 # 키매크로 활성화 상태를 나타내는 변수
 key_macro_active = True
@@ -11,6 +13,42 @@ auto_macro_active = False
 
 # auto_macro_thread 변수를 전역 변수로 선언
 auto_macro_thread = None
+macro_ai_process = None  # macro_ai.py 프로세스 핸들러
+
+def read_detected_text():
+    """3초마다 텍스트 파일을 읽고 '마,' '력'을 포함하면 Ctrl + Z를 누름"""
+    while True:
+        try:
+            with open("detected_text.txt", "r", encoding="utf-8") as file:
+                text = file.read()
+                # '마' 또는 '력'이 포함되어 있는지 확인
+                if '마' in text or '력' in text:
+                    pyautogui.keyDown('ctrl')
+                    pyautogui.press('z')  # Ctrl + Z 누르기
+                    pyautogui.keyUp('ctrl')
+                    print("마 또는 력이 감지되어 Ctrl + Z 누름")
+        except Exception as e:
+            
+            print(f"텍스트 파일 읽기 오류: {e}")
+        
+        time.sleep(3)  # 1초마다 텍스트 파일 읽기
+
+def start_macro_ai():
+    """macro_ai.py 스크립트 실행"""
+    global macro_ai_process
+    if macro_ai_process is None or macro_ai_process.poll() is not None:  # 프로세스가 종료된 경우만 실행
+        print("macro_ai.py 스크립트 실행 중...")
+        macro_ai_process = subprocess.Popen(["python", "macro_ai.py"])  # macro_ai.py 실행
+    else:
+        print("macro_ai.py 스크립트는 이미 실행 중입니다.")
+
+def stop_macro_ai():
+    """macro_ai.py 스크립트 종료"""
+    global macro_ai_process
+    if macro_ai_process is not None:
+        macro_ai_process.terminate()  # macro_ai.py 프로세스 종료
+        macro_ai_process = None
+        print("macro_ai.py 스크립트 종료됨.")
 
 def press_key_with_duration(key, duration):
     """지정된 키를 자동으로 누르고 있는 동안 →와 Enter를 반복적으로 실행."""
@@ -23,7 +61,6 @@ def press_key_with_duration(key, duration):
         time.sleep(0.01)
     pyautogui.keyUp(key)
     print(f"{key} 매크로 중지")
-
 
 def debuff_macro(key):
     """지정된 키를 누르고 있는 동안 →와 Enter를 반복적으로 실행."""
@@ -38,6 +75,8 @@ def debuff_macro(key):
 def bomu_macro():
     """보무 매크로: 5번 + Home + Enter, 6번 + Home + Enter"""
     print("보무 매크로 실행 중...")
+    
+    time.sleep(0.1)
     pyautogui.press('5')
     pyautogui.press('home')
     pyautogui.press('enter')
@@ -62,9 +101,11 @@ def heal_auto():
 def auto_macro():
     """자동 사냥 매크로 동작"""
     print("자동 사냥 매크로 시작")
-    last_bomu_time = time.time()  # 시작할 때 보무 매크로가 실행되도록 초기화
+    last_bomu_time = time.time() - 100 # 시작할 때 보무 매크로가 실행되도록 초기화
+    last_posion_time = time.time() - 20 # 중독 쿨타임15초 반복실행변수
 
     while auto_macro_active:  # auto_macro_active 상태를 확인
+
         current_time = time.time()
 
         
@@ -78,11 +119,10 @@ def auto_macro():
             break
 
         # 반복 동작 전에 추가할 작업
-        press_key_with_duration('1', 2)  # 1번 키로 2초 동안 실행
-        if not auto_macro_active:
-            break
+        if current_time - last_posion_time >= 20:    
+            press_key_with_duration('1', 3)  # 1번 키로 2초 동안 실행
+            last_posion_time = current_time
 
-        press_key_with_duration('9', 2)  # 9번 키로 2초 동안 실행
         if not auto_macro_active:
             break
 
@@ -90,15 +130,14 @@ def auto_macro():
         for _ in range(5):  # 다음 동작을 5회 반복
             if not auto_macro_active:
                 break  # auto_macro_active가 False이면 반복문 종료
-            
             heal_auto()
             heal_auto()
             pyautogui.press('3')            
-            time.sleep(1)  # 1초 딜레이 추가
+            time.sleep(0.75)  # 0.5초 딜레이 추가
             pyautogui.press('3')
-            time.sleep(1)
+            time.sleep(0.75)  # 0.5초 딜레이 추가
             pyautogui.press('3')
-            time.sleep(1)
+            time.sleep(0.75)  # 0.5초 딜레이 추가
             pyautogui.press('4')
             heal_auto()
             heal_auto()
@@ -108,13 +147,8 @@ def auto_macro():
             heal_auto()
             heal_auto()
             heal_auto()
-            heal_auto()
-            heal_auto()
-
 
     print("자동 사냥 매크로 종료")
-
-
 
 def start_auto_macro():
     """자동 매크로를 스레드로 실행"""
@@ -134,6 +168,20 @@ def start_auto_macro():
     auto_macro_thread.daemon = True
     auto_macro_thread.start()
     print("자동 매크로 즉시 시작")
+
+    # 텍스트 파일을 읽어들이는 스레드 시작
+    text_reader_thread = threading.Thread(target=read_detected_text)
+    text_reader_thread.daemon = True
+    text_reader_thread.start()
+
+    # macro_ai.py 스크립트 실행
+    start_macro_ai()
+
+def stop_auto_macro():
+    """자동 매크로 중지"""
+    global auto_macro_active
+    auto_macro_active = False
+    stop_macro_ai()  # macro_ai.py 종료
 
 def main():
     global key_macro_active, auto_macro_active
@@ -172,6 +220,7 @@ def main():
                     start_auto_macro()
                 else:
                     print("자동 매크로 비활성화")
+                    stop_auto_macro()
                 time.sleep(1)
 
             if key_macro_active:  # 매크로가 활성화 상태일 때만 실행
