@@ -88,15 +88,15 @@ def stop_macro_ai():
         macro_ai_process = None
         print("macro_ai.py 스크립트 종료됨.")
 
-def press_key_with_duration(key, duration):
+def press_key_with_duration(key, arrow, duration, timevalue):
     """지정된 키를 자동으로 누르고 있는 동안 →와 Enter를 반복적으로 실행."""
     print(f"{key} 매크로 실행 중...")
     start_time = time.time()
     while time.time() - start_time < duration:
         pyautogui.keyDown(key)
-        pyautogui.press('left')
+        pyautogui.press(arrow)
         pyautogui.press('enter')
-        time.sleep(0.01)
+        time.sleep(timevalue)
     pyautogui.keyUp(key)
     print(f"{key} 매크로 중지")
 
@@ -130,11 +130,11 @@ def heal_macro():
     pyautogui.press('home')
     print("2번과 Home 키가 눌렸습니다.")
 
-def heal_auto():
+def heal_auto(timevalue):
     pyautogui.press('2')
     pyautogui.press('home')
     pyautogui.press('enter')
-    time.sleep(0.1)
+    time.sleep(timevalue)
 
 def auto_macro():
     """자동 사냥 매크로 동작"""
@@ -152,15 +152,26 @@ def auto_macro():
 
         # 중독 매크로 실행 조건
         if current_time - last_posion_time >= 15:
-            press_key_with_duration('1', 3)  # 1번 키를 3초 동안 누름
+            press_key_with_duration('1', 'left', 3, 0.01)  # 1번 키를 3초 동안 누름
             last_posion_time = current_time  # 중독 실행 시간 갱신
 
         if not auto_macro_active:
             break
 
         # 반복 동작
-        heal_auto()
-        heal_auto()
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        pyautogui.press('3')
+        time.sleep(0.75)
+        pyautogui.press('3')
+        time.sleep(0.75)
+        pyautogui.press('3')
+        time.sleep(0.75)
+        pyautogui.press('3')
+        time.sleep(0.75)
+        pyautogui.press('3')
+        time.sleep(0.75)
         pyautogui.press('3')
         time.sleep(0.75)
         pyautogui.press('3')
@@ -168,17 +179,20 @@ def auto_macro():
         pyautogui.press('3')
         time.sleep(0.75)
         pyautogui.press('4')
-        heal_auto()
-        heal_auto()
-        heal_auto()
-        heal_auto()
-        heal_auto()
-        pyautogui.press('4')
-        heal_auto()
-        heal_auto()
-        heal_auto()
-        heal_auto()
-        heal_auto()
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+        heal_auto(0.2)
+
 
     print("자동 사냥 매크로 종료")
 

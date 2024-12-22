@@ -6,6 +6,8 @@ import time
 # Tesseract 경로 설정
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
+os.environ['TESSDATA_PREFIX'] = r'C:\Program Files\Tesseract-OCR\tessdata'
+
 
 def capture_screen():
     """게임 화면에서 특정 영역을 캡처합니다."""
