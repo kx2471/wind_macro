@@ -56,9 +56,7 @@ def read_detected_text():
 
                     # '마력'이 포함되어 있는지 확인
                     if '마력' in normalized_text:
-                        pyautogui.keyDown('ctrl')
-                        pyautogui.press('z')  # Ctrl + Z 누르기
-                        pyautogui.keyUp('ctrl')
+                        press_key_with_duration('ctrl + z', 'left', 1, 0.1)
                         print(normalized_text)
                         print("마력이 부족하여 Ctrl + Z")
         except Exception as e:
@@ -93,11 +91,19 @@ def press_key_with_duration(key, arrow, duration, timevalue):
     print(f"{key} 매크로 실행 중...")
     start_time = time.time()
     while time.time() - start_time < duration:
-        pyautogui.keyDown(key)
-        pyautogui.press(arrow)
-        pyautogui.press('enter')
-        time.sleep(timevalue)
-    pyautogui.keyUp(key)
+        if key == 'ctrl + z':
+            pyautogui.keyDown('ctrl')
+            pyautogui.press('z')
+            time.sleep(0.1)
+        else:           
+            pyautogui.keyDown(key)
+            pyautogui.press(arrow)
+            pyautogui.press('enter')
+            time.sleep(timevalue)
+    if key == 'ctrl + z':
+        pyautogui.keyUp('ctrl')
+    else:
+        pyautogui.keyUp(key)
     print(f"{key} 매크로 중지")
 
 def debuff_macro(key):
@@ -130,11 +136,19 @@ def heal_macro():
     pyautogui.press('home')
     print("2번과 Home 키가 눌렸습니다.")
 
-def heal_auto(timevalue):
-    pyautogui.press('2')
-    pyautogui.press('home')
-    pyautogui.press('enter')
-    time.sleep(timevalue)
+def heal_auto(count, timevalue):
+    """지정된 횟수만큼 2, Home, Enter를 누르고 대기."""
+    for _ in range(count):  # count만큼 반복
+        pyautogui.press('2')       # 2번 키 입력
+        pyautogui.press('home')    # Home 키 입력
+        pyautogui.press('enter')   # Enter 키 입력
+        time.sleep(timevalue)      # timevalue만큼 대기
+
+def attack_auto(count, timevalue):
+    """지정된 횟수만큼 첨사냥 공격 실행"""
+    for _ in range(count):
+        pyautogui.press('3')
+        time.sleep(timevalue)      
 
 def auto_macro():
     """자동 사냥 매크로 동작"""
@@ -159,39 +173,10 @@ def auto_macro():
             break
 
         # 반복 동작
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        pyautogui.press('3')
-        time.sleep(0.75)
-        pyautogui.press('3')
-        time.sleep(0.75)
-        pyautogui.press('3')
-        time.sleep(0.75)
-        pyautogui.press('3')
-        time.sleep(0.75)
-        pyautogui.press('3')
-        time.sleep(0.75)
-        pyautogui.press('3')
-        time.sleep(0.75)
-        pyautogui.press('3')
-        time.sleep(0.75)
-        pyautogui.press('3')
-        time.sleep(0.75)
+        heal_auto(3, 0.2)
+        attack_auto(8, 0.75)
         pyautogui.press('4')
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
-        heal_auto(0.2)
+        heal_auto(17, 0.2)
 
 
     print("자동 사냥 매크로 종료")
