@@ -157,6 +157,7 @@ def attack_auto(count, timevalue):
 
 #마비를 상하좌우로 시전
 def mabi_auto():
+    time.sleep(0.3)
     pyautogui.press('home')
     pyautogui.press('7')
     pyautogui.press('up')
