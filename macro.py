@@ -63,6 +63,9 @@ def read_detected_text():
                     #공력증강 실패시 즉시 다시시도
                     if '실패' in normalized_text:
                         pyautogui.press('4')
+                        heal_auto(5, 0.2)
+                        print(normalized_text)
+                        print("공력증강 실패로 다시 시전합니다.")
         except Exception as e:
             print(f"텍스트 파일 읽기 오류: {e}")
 
@@ -157,6 +160,7 @@ def attack_auto(count, timevalue):
 
 #마비를 상하좌우로 시전
 def mabi_auto():
+    print("마비를 상하좌우로 시전합니다.")
     time.sleep(0.3)
     pyautogui.press('7')
     pyautogui.press('home')
