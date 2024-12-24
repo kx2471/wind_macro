@@ -59,6 +59,10 @@ def read_detected_text():
                         press_key_with_duration('ctrl + z', 'left', 1, 0.1)
                         print(normalized_text)
                         print("마력이 부족하여 Ctrl + Z")
+
+                    #공력증강 실패시 즉시 다시시도
+                    if '실패' in normalized_text:
+                        pyautogui.press('4')
         except Exception as e:
             print(f"텍스트 파일 읽기 오류: {e}")
 
@@ -144,39 +148,68 @@ def heal_auto(count, timevalue):
         pyautogui.press('enter')   # Enter 키 입력
         time.sleep(timevalue)      # timevalue만큼 대기
 
+#첨사냥시전
 def attack_auto(count, timevalue):
     """지정된 횟수만큼 첨사냥 공격 실행"""
     for _ in range(count):
         pyautogui.press('3')
         time.sleep(timevalue)      
 
+#마비를 상하좌우로 시전
+def mabi_auto():
+    pyautogui.press('home')
+    pyautogui.press('7')
+    pyautogui.press('up')
+    pyautogui.press('enter')
+    pyautogui.press('7')
+    pyautogui.press('left')
+    pyautogui.press('enter')
+    pyautogui.press('7')
+    pyautogui.press('right')
+    pyautogui.press('enter')
+    pyautogui.press('7')
+    pyautogui.press('down')
+    pyautogui.press('enter')
+
 def auto_macro():
     """자동 사냥 매크로 동작"""
     print("자동 사냥 매크로 시작")
     last_bomu_time = time.time() - 50  # 시작할 때 보무 매크로가 실행되도록 초기화
     last_posion_time = time.time() - 15  # 중독 쿨타임 15초로 초기화
+    last_mabi_time = time.time() - 20
+    last_noroi_time = time.time() - 300 #저주쿨타임 300초 초기화
 
     while auto_macro_active:  # auto_macro_active 상태를 확인
         current_time = time.time()
+
+        # 우선순위 1번째로 마비매크로 실행
+        if current_time - last_mabi_time >= 20:
+            mabi_auto()
+            last_mabi_time = current_time # 마비 매크로 시간 갱신
 
         # 보무 매크로 실행 조건
         if current_time - last_bomu_time >= 50:
             bomu_macro()
             last_bomu_time = current_time  # 보무 매크로 실행 시간 갱신
 
+        # 저주 매크로 실행 조건
+        if current_time - last_noroi_time >= 300:
+            press_key_with_duration('1', 'left', 4, 0.01)  # 1번 키를 4초 동안 누름
+            last_posion_time = current_time  # 저주 실행 시간 갱신
+
         # 중독 매크로 실행 조건
         if current_time - last_posion_time >= 15:
-            press_key_with_duration('1', 'left', 3, 0.01)  # 1번 키를 3초 동안 누름
+            press_key_with_duration('1', 'left', 4, 0.01)  # 1번 키를 4초 동안 누름
             last_posion_time = current_time  # 중독 실행 시간 갱신
 
         if not auto_macro_active:
             break
 
         # 반복 동작
-        heal_auto(3, 0.2)
+        heal_auto(10, 0.2)
         attack_auto(8, 0.75)
         pyautogui.press('4')
-        heal_auto(17, 0.2)
+        heal_auto(15, 0.2)
 
 
     print("자동 사냥 매크로 종료")
@@ -255,7 +288,7 @@ def main():
 
             if key_macro_active:  # 매크로가 활성화 상태일 때만 실행
                 if keyboard.is_pressed('7'):
-                    debuff_macro('7')
+                    mabi_auto()
 
                 if keyboard.is_pressed('1'):
                     debuff_macro('1')
