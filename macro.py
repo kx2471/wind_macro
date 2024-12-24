@@ -61,7 +61,8 @@ def read_detected_text():
                         print("마력이 부족하여 Ctrl + Z")
 
                     #공력증강 실패시 즉시 다시시도
-                    if '실패' in normalized_text:
+                    if ('실패' or '정신' or '집중') in normalized_text:
+                        time.sleep(0.2)
                         pyautogui.press('4')
                         heal_auto(5, 0.2)
                         print(normalized_text)
