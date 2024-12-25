@@ -56,17 +56,21 @@ def read_detected_text():
 
                     # '마력'이 포함되어 있는지 확인
                     if '마력' in normalized_text:
-                        press_key_with_duration('ctrl + z', 'left', 1, 0.1)
+                        press_key_with_duration('ctrl + z', 'left', 2.5, 0.1)
+                        time.sleep(0.3)
+                        pyautogui.press('4')
+                        pyautogui.press('4')
+                        time.sleep(0.2)
                         print(normalized_text)
-                        print("마력이 부족하여 Ctrl + Z")
+                        print("마력이 부족하여 Ctrl + Z, 공력증강, 힐, 마비")
 
                     #공력증강 실패시 즉시 다시시도
-                    if ('실패' or '정신' or '집중') in normalized_text:
+                    """if ('실패' or '정신' or '집중') in normalized_text:
                         time.sleep(0.2)
                         pyautogui.press('4')
                         heal_auto(5, 0.2)
                         print(normalized_text)
-                        print("공력증강 실패로 다시 시전합니다.")
+                        print("공력증강 실패로 다시 시전합니다.")"""
         except Exception as e:
             print(f"텍스트 파일 읽기 오류: {e}")
 
@@ -157,6 +161,8 @@ def attack_auto(count, timevalue):
     """지정된 횟수만큼 첨사냥 공격 실행"""
     for _ in range(count):
         pyautogui.press('3')
+        time.sleep(0.4)
+        pyautogui.press('8')
         time.sleep(timevalue)      
 
 #마비를 상하좌우로 시전
@@ -191,34 +197,56 @@ def auto_macro():
     while auto_macro_active:  # auto_macro_active 상태를 확인
         current_time = time.time()
 
+        if not auto_macro_active:
+            break
+
         # 우선순위 1번째로 마비매크로 실행
         if current_time - last_mabi_time >= 20:
             mabi_auto()
             last_mabi_time = current_time # 마비 매크로 시간 갱신
+        if not auto_macro_active:
+            break
 
         # 보무 매크로 실행 조건
         if current_time - last_bomu_time >= 50:
             bomu_macro()
             last_bomu_time = current_time  # 보무 매크로 실행 시간 갱신
+        if not auto_macro_active:
+            break
 
         # 저주 매크로 실행 조건
         if current_time - last_noroi_time >= 300:
-            press_key_with_duration('1', 'left', 4, 0.01)  # 1번 키를 4초 동안 누름
-            last_posion_time = current_time  # 저주 실행 시간 갱신
+            press_key_with_duration('9', 'left', 4, 0.01)  # 1번 키를 4초 동안 누름
+            last_noroi_time = current_time  # 저주 실행 시간 갱신
+        if not auto_macro_active:
+            break
 
         # 중독 매크로 실행 조건
         if current_time - last_posion_time >= 15:
             press_key_with_duration('1', 'left', 4, 0.01)  # 1번 키를 4초 동안 누름
             last_posion_time = current_time  # 중독 실행 시간 갱신
-
         if not auto_macro_active:
             break
 
         # 반복 동작
-        heal_auto(10, 0.2)
-        attack_auto(8, 0.75)
-        pyautogui.press('4')
         heal_auto(15, 0.2)
+        if not auto_macro_active:
+            break
+        mabi_auto()
+        if not auto_macro_active:
+            break
+        attack_auto(8, 0.75)
+        if not auto_macro_active:
+            break
+        mabi_auto()
+        if not auto_macro_active:
+            break
+        pyautogui.press('4')
+        if not auto_macro_active:
+            break
+        heal_auto(15, 0.2)
+        if not auto_macro_active:
+            break
 
 
     print("자동 사냥 매크로 종료")
@@ -309,7 +337,7 @@ def main():
                     bomu_macro()
 
                 if keyboard.is_pressed('2'):
-                    heal_macro()
+                    heal_auto(1, 0)
 
             if keyboard.is_pressed('f12'):  # f12로 프로그램 종료
                 print("프로그램 종료")
