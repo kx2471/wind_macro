@@ -201,11 +201,11 @@ def auto_macro():
             break
 
         # 우선순위 1번째로 마비매크로 실행
-        if current_time - last_mabi_time >= 20:
-            mabi_auto()
-            last_mabi_time = current_time # 마비 매크로 시간 갱신
-        if not auto_macro_active:
-            break
+        #if current_time - last_mabi_time >= 20:
+        #    mabi_auto()
+        #    last_mabi_time = current_time # 마비 매크로 시간 갱신
+        #if not auto_macro_active:
+        #    break
 
         # 보무 매크로 실행 조건
         if current_time - last_bomu_time >= 50:
@@ -229,22 +229,22 @@ def auto_macro():
             break
 
         # 반복 동작
-        heal_auto(15, 0.2)
+        heal_auto(5, 0.2)
         if not auto_macro_active:
             break
-        mabi_auto()
-        if not auto_macro_active:
-            break
-        attack_auto(8, 0.75)
-        if not auto_macro_active:
-            break
-        mabi_auto()
+        # mabi_auto()
+        # if not auto_macro_active:
+        #     break
+        attack_auto(10, 0.3)
         if not auto_macro_active:
             break
         pyautogui.press('4')
         if not auto_macro_active:
             break
-        heal_auto(15, 0.2)
+        # mabi_auto()
+        # if not auto_macro_active:
+        #     break
+        heal_auto(10, 0.2)
         if not auto_macro_active:
             break
 
