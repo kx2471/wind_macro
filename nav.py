@@ -116,11 +116,47 @@ def load_memory(map_name):
         twins = [twin for twin in twins if ROOM.fullmatch(twin.stem) and ROOM.fullmatch(twin.stem)[3] == found[3]]
         if twins:
             return set(), {tuple(c) for c in json.loads(twins[0].read_text())["free"]}
+        spooky = HAUNT_ROOM.fullmatch(map_name)
+        if spooky:
+            # 흉가는 묶음이 달라도 방이 같다. 다른 묶음의 같은 번호 방에서 걸어 본 것을 그대로 빌린다 (막힌 칸까지)
+            for other in sorted(WALLS.glob(f"*흉가{spooky[3]}.json")):
+                found = HAUNT_ROOM.fullmatch(other.stem)
+                if found and found[3] == spooky[3]:
+                    saved = json.loads(other.read_text())
+                    return {tuple(c) for c in saved["blocked"]}, {tuple(c) for c in saved["free"]}
+        if map_name.endswith("흉가입구") and (WALLS / "상곡흉가입구.json").exists():
+            return set(), {tuple(c) for c in json.loads((WALLS / "상곡흉가입구.json").read_text())["free"]}
         return set(), set()
     saved = json.loads(path.read_text())
     if isinstance(saved, list):  # 예전 형식: 막힌 칸만
         saved = {"blocked": saved, "free": []}
     return {tuple(c) for c in saved["blocked"]}, {tuple(c) for c in saved["free"]}
+
+
+TITLES = Path(__file__).parent / "data" / "titles"
+
+
+def map_changed(map_image, wait=10.0):
+    """맵 이름 그림이 map_image와 달라졌는지. 아는 맵 이름으로 바뀌었으면 바로 True.
+
+    게임이 한 시간마다 화면 위에 "N시간 동안 플레이하였습니다" 안내를 몇 초 띄우는데 이 상자가 맵 이름을 덮는다.
+    그때 그림만 견주면 맵이 바뀐 줄 알고 다음 방 길로 걷거나 오류를 낸다 (2026-10-12 03:57, 05:57).
+    그래서 아는 맵 이름이 아닌 그림이면 wait초까지 원래 그림으로 돌아오는지 기다려 본다.
+    """
+    now = wind.snapshot("map_name")
+    if now == map_image:
+        return False
+    known = [path.read_bytes() for path in TITLES.glob("*.bin")]
+    until = time.monotonic() + wait
+    while time.monotonic() < until:
+        if now is not None and any(title[:len(now)] == now for title in known):
+            return True
+        time.sleep(0.4)
+        now = wind.snapshot("map_name")
+        if now == map_image:
+            print("  맵 이름이 잠깐 가려졌다가 돌아왔다", flush=True)
+            return False
+    return True
 
 
 def save_memory(map_name, blocked, free):
@@ -147,6 +183,7 @@ def load_ports():
                 sizes[row[1]] = (int(row[2]), int(row[3]))
     shift_rooms(ports, sizes)
     fixed = data / "ports_fixed.tsv"
+    sized = []  # (크기를 빌릴 맵, 빌려줄 맵)
     if fixed.exists():
         for line in fixed.read_text(encoding="utf-8").splitlines()[1:]:
             name, x, y, destination = line.split("\t")
@@ -158,11 +195,38 @@ def load_ports():
                     twin = ROOM.fullmatch(other)
                     if twin and twin[3] == room[3] and other != name:
                         targets.append((other, f"{twin[1]}{following[3]}"))
+            spooky = HAUNT_ROOM.fullmatch(name)
+            if spooky:
+                # 흉가는 묶음(상곡흉가, 제2상곡흉가, … )이 달라도, 성이 달라도 방 안의 길이 같다 (사용자 확인, 2026-10-13).
+                # 한 묶음에서 확인한 방 출구를 모든 성의 모든 묶음에 쓴다. 10번 방은 그 성으로 나간다
+                onward = HAUNT_ROOM.fullmatch(destination)
+                for castle in haunt_castles(spooky[2].removesuffix("흉가")):
+                    for group in range(1, 10):
+                        prefix = f"{castle}흉가" if group == 1 else f"제{group}{castle}흉가"
+                        twin = (f"{prefix}{spooky[3]}", f"{prefix}{onward[3]}" if onward else f"부여{castle}성")
+                        if twin not in targets:
+                            targets.append(twin)
+                        sized.append((twin[0], name))
             for map_name, goes_to in targets:
                 exits = ports.setdefault(map_name, {})
                 for cell in [c for c, d in exits.items() if d == goes_to]:
                     del exits[cell]
                 exits[(int(x), int(y))] = goes_to
+    # 흉가입구에서 각 묶음으로 들어가는 문은 설정에 적은 것을 쓴다 (자료의 문 좌표는 맞지 않는다). 모든 성의 입구가 같다고 본다
+    for castle in haunt_castles():
+        hall = f"{castle}흉가입구"
+        # 성에서 흉가입구로 들어가는 칸: 자료와 사용자 설명은 (69, 121)인데, 그 칸에 서도 안 넘어간다 (2026-10-13 천안궁성).
+        # 상곡성에서 걸어서 확인한 칸은 한 칸 위 (69, 120)이다. 모든 성에 그 칸을 쓴다
+        town = ports.setdefault(f"부여{castle}성", {})
+        for cell in [c for c, d in town.items() if d == hall]:
+            del town[cell]
+        town[(69, 120)] = hall
+        exits = ports.setdefault(hall, {})
+        for group, door in wind.CONFIG.get("haunt_doors", {}).items():
+            first = f"{castle}흉가1" if int(group) == 1 else f"제{group}{castle}흉가1"
+            for cell in [c for c, d in exits.items() if d == first]:
+                del exits[cell]
+            exits[(door[0], door[1])] = first
     # 흉가는 출구 자료가 없어 크기도 없다. 맵 목록의 크기를 쓴다. 게임의 흉가 k번 방은 자료의 "제8…흉가k"와
     # 구조가 비슷하다 (2026-10-10 제2상곡흉가를 걸어 본 칸 범위와 맞는다. 정확히 확인한 값은 아니다)
     index = {}
@@ -178,9 +242,24 @@ def load_ports():
                 sizes[name] = index[model]
     for name, size in index.items():
         sizes.setdefault(name, size)  # 출구 자료가 없는 맵(성황당 등)도 크기는 맵 목록에 있다
+    for borrower, lender in sized:
+        if lender in sizes:
+            sizes[borrower] = sizes[lender]  # 길이 같다 = 크기도 같다 (맵 목록의 크기는 성마다 달라서 믿지 않는다)
+    for castle in haunt_castles():
+        if "상곡흉가입구" in sizes:
+            sizes[f"{castle}흉가입구"] = sizes["상곡흉가입구"]
     return ports, sizes
 
 
+def haunt_castles(first=None):
+    """흉가를 돌 수 있는 성 이름들 (설정의 haunt_castles). first를 주면 그 성을 꼭 넣는다."""
+    names = list(wind.CONFIG.get("hunt", {}).get("haunt_castles", ["상곡"]))
+    if first and first not in names:
+        names.insert(0, first)
+    return names
+
+
+HAUNT_ROOM = re.compile(r"(제\d+)?(.+흉가)(\d+)")  # 흉가의 방: (묶음 앞머리, 바탕 이름, 방 번호)
 ROOM = re.compile(r"((?:제\d+)?(.+)비밀세작의집)(\d+)")
 
 
@@ -295,13 +374,14 @@ def go(map_name, goal, ports=None, sizes=None, max_steps=1500, near=NEAR, before
     free.add(here)
     map_image = wind.snapshot("map_name")  # 맵 이름 그림. 이게 바뀌면 맵이 바뀐 것
     facing = None  # 마지막으로 누른 방향. 같은 방향을 또 누르면 돌기만 하는 일이 없다
+    fresh = set()  # 이번 걸음에서 새로 막힌 칸으로 적은 것. 몹이 서 있던 칸일 수 있다
     if not quiet:
         print(f"{map_name} {here} → {goal}, 아는 막힌 칸 {len(walls)}개, 밟아 본 칸 {len(free)}개")
     try:
         for _ in range(max_steps):
             if before_step:
                 before_step()
-                if wind.snapshot("map_name") != map_image:
+                if map_changed(map_image):
                     raise RuntimeError(f"{map_name}에서 싸우는 중에 맵이 바뀌었다")
                 moved = position()
                 if moved != here:  # 싸우다 밀렸다
@@ -312,12 +392,20 @@ def go(map_name, goal, ports=None, sizes=None, max_steps=1500, near=NEAR, before
             if here == goal:
                 # 출구 칸은 좌표가 먼저 바뀌고 맵이 조금 뒤에 바뀐다
                 time.sleep(wind.ROAM["map_wait"])
-                if wind.snapshot("map_name") != map_image:
+                if map_changed(map_image):
                     print(f"  {goal}을 밟고 맵이 바뀌었다. 도착 좌표 {read_position()}")
                     last_exit = goal
                     return "left"
                 return "arrived"
             path = find_path(here, goal, sizes[map_name], blocked, free, facing)
+            if path is None and fresh:
+                # 몹이 통로를 막고 있을 때 그 칸이 벽으로 적히면 문이 닫힌 것으로 계산돼서, 벽을 따라 방 끝까지 더듬어 간 뒤
+                # 제자리에서 맴돈다 (2026-10-12 05:41 6번 방 8분, 06:35 9번 방 10분). 이번 걸음에서 적은 것은 다 지우고 다시 찾는다
+                print(f"  길이 없다. 이번 걸음에서 막힌 칸으로 적은 {len(fresh)}칸을 지우고 다시 찾는다", flush=True)
+                blocked -= fresh
+                walls -= fresh
+                fresh.clear()
+                continue
             if path is None:
                 # 몹이 사방을 막고 있을 때 옆 칸들이 벽으로 잘못 적히면 그 자리에 갇힌다
                 # (제3상곡 5번 방 (14, 4)에서 네 칸이 다 막힌 칸으로 적혀 3분을 서 있었다). 내 옆의 막힌 칸은 지우고 다시 찾는다
@@ -339,7 +427,7 @@ def go(map_name, goal, ports=None, sizes=None, max_steps=1500, near=NEAR, before
                 if now != here or wind.snapshot("map_name") != map_image:
                     break
             facing = direction
-            if wind.snapshot("map_name") != map_image:
+            if map_changed(map_image):
                 if abs(target[0] - goal[0]) + abs(target[1] - goal[1]) <= near:
                     time.sleep(wind.ROAM["map_wait"])
                     print(f"  {target}을 밟고 맵이 바뀌었다. 도착 좌표 {read_position()}")
@@ -369,6 +457,7 @@ def go(map_name, goal, ports=None, sizes=None, max_steps=1500, near=NEAR, before
                     raise RuntimeError("막혔다")  # 몹에게 다가가는 중: 몹일 수 있으니 벽으로 적지 않는다
                 blocked.add(target)
                 walls.add(target)
+                fresh.add(target)
                 print(f"  막힘 {target}")
             elif now != target:
                 # 맵은 그대로인데 한 칸보다 많이 움직였다 = 밀렸거나 읽는 순간이 어긋났다. 다시 읽는다

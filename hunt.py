@@ -413,19 +413,77 @@ class Fighter:
         time.sleep(0.18)
         return mp - (wind.read_bars() or (1.0, 1.0))[1] > 0.03
 
-    def fill(self, mp):
-        """공력증강으로 마력을 채운다 (바닥이면 동동주 한 잔 먼저). 체력은 보지 않는다: 고정 중에는 힐이 계속 나간다."""
+    def fill(self, mp, locked=True):
+        """공력증강으로 마력을 채우고, 바로 힐을 연달아 써서 깎인 체력을 메운다 (바닥이면 동동주 한 잔 먼저).
+
+        체력은 따지지 않고 쓴다. 공력증강은 지금 체력의 60~70%를 깎는다. 사용자: "체력을 항상 80% 이상 채울 필요 없어.
+        공력증강을 쓴 뒤에 자기 힐만 잘 해 주면 돼" (2026-10-13).
+        locked: 대상이 나에게 고정돼 있으면 힐 키만 누르면 되고(빠르다), 아니면 힐을 나에게 겨눠서 쓴다.
+        """
         if mp < AUTO["potion_below"]:
             wind.drink()  # 공력증강에 마력 30이 든다
         wind.press(KEYS["gongjeung"])
         end = time.monotonic() + AUTO["gongjeung_wait"]
+        filled = False
         while time.monotonic() < end:
             if (wind.read_bars() or (1.0, 1.0))[1] >= HUNT["fast_mp_low"]:
-                self.refill_fails = 0
-                return True
+                filled = True
+                break
             time.sleep(0.03)
-        self.refill_fails += 1
-        return False
+        if not filled:
+            self.refill_fails += 1
+            return False
+        self.refill_fails = 0
+        # 힐은 나에게 고정해 놓고 힐 키만 연달아 누른다. 걷는 중이라 고정이 안 돼 있으면 여기서 건다 (Esc → Tab → Tab).
+        # 처음에는 걷는 중에 힐을 한 번씩 나에게 겨눠 썼는데 너무 느렸다 (사용자, 2026-10-13: "자기 자신 탭해서 연속으로 누르는 거로 해")
+        mine = locked or wind.relock()
+        for _ in range(HUNT.get("heal_after_refill", 0)):
+            if (wind.read_bars() or (1.0, 1.0))[0] >= HUNT.get("heal_after_refill_to", 0.4):
+                break
+            if mine:
+                wind.press(KEYS["heal"])
+                time.sleep(0.04)
+            else:
+                self.heal()  # 고정이 안 걸렸다. 겨눠서 쓴다
+        if mine and not locked:
+            wind.press("esc")  # 걷는 중에는 고정을 풀어 둔다 (풀어야 선택창으로 몹을 볼 수 있다)
+            time.sleep(0.05)
+        return True
+
+    def walk_hellfire(self):
+        """걷는 중에 쿨이 돌았으면 헬파이어를 쓴다 (사용자: "싸움 중이 아니더라도 자기 자신 아니면 그냥 쿨마다 계속 쏘게").
+
+        선택창에서 Home(나) → ← 한 번으로 바로 다음 대상에게 쓴다. 넘겨도 상자가 나에게 있으면(고를 몹이 없으면) 안 쓴다.
+        쓰고 나면 마력이 바닥나므로 공력증강으로 채우고 힐을 쓴다.
+        """
+        now = time.monotonic()
+        if not (HUNT.get("walk_hellfire") and KEYS["hellfire"]) or now < self.hellfire_at or wind.cooling():
+            return
+        hp, mp = wind.read_bars() or (1.0, 1.0)
+        if mp < AUTO["hellfire_min_mp"]:
+            self.fill(mp, locked=False)
+            mp = (wind.read_bars() or (1.0, 1.0))[1]
+            if mp < AUTO["hellfire_min_mp"]:
+                self.hellfire_at = time.monotonic() + AUTO["hellfire_retry"]
+                return
+        self.release()
+        cast, _ = wind.hellfire_scan(KEYS["hellfire"], HUNT["targets"], True)
+        fired = False
+        for _ in range(12 if cast else 0):  # 나갔으면 왼쪽 위에 쿨 글자가 뜬다
+            fired = wind.cooling()
+            if fired:
+                break
+            time.sleep(0.05)
+        if not fired:
+            self.hellfire_at = time.monotonic() + HUNT.get("walk_hellfire_retry", 3.0)
+            return
+        self.hellfire_mana.append(round(mp, 2))
+        self.hellfire_at = time.monotonic() + AUTO["hellfire_every"]
+        self.count["hellfire"] += 1
+        left = (wind.read_bars() or (1.0, 1.0))[1]
+        print(f"   {time.strftime('%H:%M:%S')} 걷는 중 헬파이어 (체력 {hp:.0%}, 마력 {mp:.0%}→{left:.0%})", flush=True)
+        if left < AUTO["hellfire_min_mp"]:
+            self.fill(left, locked=False)  # 바닥난 마력을 바로 채우고 힐을 쓴다
 
     def fight_fast(self):
         """대상을 자신에게 고정하고 spam_keys와 기본 공격을 쉬지 않고 누른다.
@@ -449,6 +507,7 @@ class Fighter:
         front = home = None  # 내가 보고 있는 붙은 몹의 방향과 내 칸. 쿨 중에는 선택창 대신 그 칸만 살펴본다
         exits = set(self.ports.get(self.room, {})) if self.room else set()
         looks = []
+        low_since = low_said = None  # 체력이 fast_hellfire_hp 아래로 내려간 시각, 그 사실을 마지막으로 찍은 시각
         began, spam0, hell0, scans = time.monotonic(), self.count["spam"], self.count["hellfire"], []
         try:
             while True:
@@ -481,19 +540,32 @@ class Fighter:
                 # 쿨이 끝났고 앞에 몹이 있으면 scan_gap을 다 기다리지 않고 선택창을 열어 쓴다. 다만 직전 선택창에서
                 # look_gap은 지나야 한다: 이 틈이 없으면 못 썼을 때 선택창만 쉬지 않고 열어서 힐도 공격도 안 나간다
                 # (2026-10-11 13:30, 몹이 길을 막고 있는데 싸우는 키가 안 눌렸다)
-                if now >= scan_at and hp < HUNT["fast_hellfire_hp"] and locked and fought:
+                low = hp < HUNT["fast_hellfire_hp"] and locked and fought
+                low_since = (low_since or now) if low else None
+                # 체력이 낮은 채로 오래 못 벗어나면 헬파이어를 한 번 쓴다. 선택창을 아예 안 열면 힐과 첨만으로는 몹 여럿을
+                # 못 잡아서 40여 초 버티다 죽는다 (2026-10-12 06:10, 08:12). 바닥(low_hp_floor) 아래에서는 그래도 안 연다
+                desperate = (low and now - low_since >= HUNT.get("low_hp_patience", 10.0) and hp >= HUNT.get("low_hp_floor", 0.25)
+                             and bool(KEYS["hellfire"]) and now >= self.hellfire_at and not wind.cooling())
+                if low and (low_said is None or now - low_said >= 5.0):
+                    low_said = now
+                    print(f"   {time.strftime('%H:%M:%S')} 체력이 낮다 {now - low_since:.0f}초째: 체력 {hp:.0%} 마력 {mp:.0%}", flush=True)
+                if desperate:
+                    low_since = now  # 다음 것은 다시 low_hp_patience 뒤에
+                    print(f"   {time.strftime('%H:%M:%S')} 체력 {hp:.0%}로 못 벗어나서 헬파이어를 쓴다", flush=True)
+                if now >= scan_at and low and not desperate:
                     # 체력이 낮을 때는 선택창을 열지 않는다 (여는 1~2초 동안 힐이 끊긴다). 맞고 있으니 몹은 있는 것이다.
                     # 체력 50% 아래에서 몹 확인용 선택창을 4초마다 열다가 죽었다 (2026-10-11 18:36, 몹 4마리)
                     scan_at = now + 1.0
-                if now >= scan_at or (front and now >= early_at and not wind.cooling() and now >= self.hellfire_at
-                                      and hp >= HUNT["fast_hellfire_hp"]):
+                if desperate or now >= scan_at or (front and now >= early_at and not wind.cooling() and now >= self.hellfire_at
+                                                   and hp >= HUNT["fast_hellfire_hp"]):
                     # 고정을 풀고 선택창으로 몹을 본다: 붙은 몹이 남았는지, 어느 쪽인지. 헬파이어 차례면 그 몹에게 쓴다.
                     # (첨을 눌러 마력이 주는지로 몹이 있는지 보려 했는데, 몹에 둘러싸여서도 안 준다고 나와서 버렸다.)
                     # 푸는 1초쯤 힐이 끊기므로 헬파이어는 체력이 넉넉할 때만 쓴다
-                    use = bool(KEYS["hellfire"]) and now >= self.hellfire_at and hp >= HUNT["fast_hellfire_hp"] and self.refill_fails < 5
+                    use = (bool(KEYS["hellfire"]) and now >= self.hellfire_at and (hp >= HUNT["fast_hellfire_hp"] or desperate)
+                           and self.refill_fails < 5)
                     use = use and not wind.cooling()  # 쿨 글자가 떠 있으면 눌러도 선택창이 안 뜬다
                     if use and mp < AUTO["hellfire_min_mp"]:
-                        self.fill(mp)
+                        self.fill(mp, locked)
                         time.sleep(0.1)
                         mp = (wind.read_bars() or (1.0, 1.0))[1]
                         use = mp >= AUTO["hellfire_min_mp"]
@@ -529,7 +601,7 @@ class Fighter:
                             self.hellfire_at = now + AUTO["hellfire_every"]
                             self.count["hellfire"] += 1
                             if left < AUTO["hellfire_min_mp"]:
-                                self.fill(left)  # 바닥난 마력을 바로 채운다
+                                self.fill(left, locked)  # 바닥난 마력을 바로 채우고 힐을 쓴다
                     if not offsets and wind.last_boxes == ["선택창이 안 떴다"] and locked and blind < 3:
                         # 선택창이 안 떠서 몹을 못 본 것이지 몹이 없는 게 아니다. 이걸 "몹 없음"으로 보고 체력 54%에서
                         # 싸움을 끝낸 뒤 주우러 다니다 죽었다 (2026-10-10 19:43). 고정한 채 계속 싸우고 곧 다시 본다
@@ -578,7 +650,7 @@ class Fighter:
                     look_at = time.monotonic() + (0.6 if fired else HUNT["look_gap"])
                     continue
                 if mp < HUNT["fast_mp_low"]:
-                    self.fill(mp)
+                    self.fill(mp, locked)
                     if self.refill_fails >= 20:
                         print("  마력을 못 채운다 (동동주가 떨어진 듯). 싸움을 끝낸다", flush=True)
                         self.refill_fails = 0
@@ -807,13 +879,17 @@ class Fighter:
         """
         self.steps += 1
         self.walked += 1
-        self.rescue()
-        self.buff()
-        hurt = (wind.read_bars() or (1.0, 1.0))[0] < HUNT["gather_hp"]
-        for _ in range(12):  # 체력이 낮은 채로 걸어 들어가지 않는다. gather_hp 위로 채우고 간다 (힐 사이에 첨도 나간다)
-            if (wind.read_bars() or (1.0, 1.0))[0] >= HUNT["gather_hp"]:
-                break
+        self.check_dead()
+        hp = (wind.read_bars() or (1.0, 1.0))[0]
+        if hp < HUNT["danger_hp"]:
+            self.rescue()  # 정말 위험할 때만 멈춰서 채운다
+        elif hp < HUNT.get("walk_heal_below", 0.4):
+            # 걸으면서 힐: 걸음마다 한 번씩만 쓰고 계속 간다. 전에는 gather_hp에 찰 때까지 서서 열두 번까지 썼다
+            # (사용자, 2026-10-13: "웬만하면 힐하면서 걸어가. 멈춰서 힐하지 말고")
             self.heal()
+        self.buff()
+        self.walk_hellfire()
+        hurt = (wind.read_bars() or (1.0, 1.0))[0] < HUNT["gather_hp"]
         self.last_hp = (wind.read_bars() or (1.0, 1.0))[0]
         if not hurt:
             if self.steps < HUNT["scan_every"]:
@@ -884,6 +960,7 @@ def wait_for_game():
 
 
 HAUNT = re.compile(r"((?:제\d+)?(.+)흉가)(\d+)")  # 흉가 방 이름 (예: 제2상곡흉가3)
+marker_due = False  # 장터에 다녀와서 흉가 묶음을 새로 골랐다. 그 입구 앞에 노란비서를 한 장 버리고 들어간다
 haunt = None  # 흉가를 돌 때 그 묶음 이름 (예: "제2상곡흉가"). None이면 비밀세작의집을 돈다
 GROUPS = 4  # 한 성의 비밀세작의집은 묶음이 4개다 (그냥, 제2, 제3, 제4)
 ENTRANCE_DOOR = (87, 142)  # 성에서 비밀세작의집입구로 들어가는 칸 (성 11곳 공통)
@@ -905,6 +982,60 @@ def save_status(name=None):
     path = LOGS / f"{name or 'status'}-{time.strftime('%m%d-%H%M%S')}.png"
     image.convert("RGB").save(path)
     return path.name
+
+
+_exp_digits = None
+LAP_FILE = Path(__file__).parent / "logs" / "lap.json"  # 이번 바퀴를 시작한 시각과 경험치 (프로세스를 새로 띄워도 남게)
+
+
+def read_exp():
+    """화면 오른쪽 아래 상태창의 경험치 숫자를 읽는다. 못 읽으면 None.
+
+    숫자는 오른쪽 끝(상태창 그림의 x=378)에 맞춰져 있고 한 글자가 18픽셀이다. 초록 글씨만 뽑아 견본(data/exp_digits.npy)과
+    견준다. 2026-10-13에 찍힌 상태창 19장에서 같은 숫자는 픽셀 하나 안 틀리고 같았고, 다른 숫자끼리는 52픽셀 넘게 달랐다.
+    """
+    global _exp_digits
+    import numpy as np
+    if _exp_digits is None:
+        _exp_digits = np.load(Path(__file__).parent / "data" / "exp_digits.npy")
+    shot = wind.grab(1380, 800, 400, 200)
+    if shot is None:
+        return None
+    raw, stride, scale = shot
+    rows, wide, step = len(raw) // stride, int(round(400 * scale)), int(round(scale))
+    picture = np.frombuffer(raw, np.uint8).reshape(rows, stride)[:, :wide * 4].reshape(rows, wide, 4)[::step, ::step, 2::-1].astype(np.int64)
+    band = picture[121:137]
+    ink = (band[..., 1] > band[..., 0] + 12) & (band[..., 1] > band[..., 2] + 12) & (band[..., 1] > 60)
+    text = ""
+    for place in range(12):
+        cell = ink[:, 378 - 17 - 18 * place:379 - 18 * place]
+        if cell.shape != (16, 18) or cell.sum() < 20:
+            break
+        errors = [(cell != digit).sum() for digit in _exp_digits]
+        if min(errors) > 12:
+            return None
+        text = str(int(np.argmin(errors))) + text
+    return int(text) if text else None
+
+
+def lap_start():
+    """1번 방에 들어섰다: 이번 바퀴의 시작 시각과 경험치를 적어 둔다."""
+    import json
+    LAP_FILE.write_text(json.dumps({"time": time.time(), "exp": read_exp()}))
+
+
+def lap_report():
+    """10번 방을 나왔다: 이번 바퀴에 걸린 시간과 오른 경험치를 한 줄로 돌려준다 (시작을 못 적었으면 빈 글)."""
+    import json
+    if not LAP_FILE.exists():
+        return ""
+    began = json.loads(LAP_FILE.read_text())
+    LAP_FILE.unlink()
+    minutes, now = (time.time() - began["time"]) / 60, read_exp()
+    if not began.get("exp") or not now or not 5 < minutes < 180:
+        return f" 한 바퀴 {minutes:.1f}분 (경험치는 못 읽었다)"
+    gain = now - began["exp"]
+    return f" 한 바퀴 {minutes:.1f}분, 경험치 +{gain:,} (분당 {gain / minutes / 10000:,.0f}만)"
 
 
 def activate_game():
@@ -944,12 +1075,19 @@ def check_map(here):
         raise wind.Abort
     # 예전 캡처는 끝에 빈 바이트가 붙어 저장돼 있어서, 지금 그림 길이만큼만 견준다
     mine = TITLES / f"{here}.bin"
-    if mine.exists() and mine.read_bytes()[:len(title)] == title:
-        return here
-    for other in TITLES.glob("*.bin"):
-        if other.read_bytes()[:len(title)] == title:
-            print(f"   지금 맵은 {here}이 아니라 {other.stem}이다. 거기서 이어 간다", flush=True)
-            return other.stem
+    # 아는 맵 이름과 안 맞으면 바로 판단하지 않고 10초까지 다시 읽는다. 한 시간마다 뜨는 "N시간 동안 플레이하였습니다"
+    # 안내 상자가 맵 이름을 몇 초 덮는다 (2026-10-12 03:57, 05:57에 이것 때문에 오류가 났다)
+    for retry in range(26):
+        if mine.exists() and mine.read_bytes()[:len(title)] == title:
+            return here
+        for other in TITLES.glob("*.bin"):
+            if other.read_bytes()[:len(title)] == title:
+                print(f"   지금 맵은 {here}이 아니라 {other.stem}이다. 거기서 이어 간다", flush=True)
+                return other.stem
+        if not mine.exists() or retry == 25:
+            break
+        time.sleep(0.4)
+        title = wind.snapshot("map_name") or title
     if mine.exists():
         raise RuntimeError(f"지금 맵이 {here}이 아니다. 어느 맵인지 모르겠다")
     mine.write_bytes(title)
@@ -972,6 +1110,11 @@ def revive(castle="상곡"):
         if wind.prompt_open():
             wind.tap("esc")
             time.sleep(0.2)
+    # 오른쪽 칸에 장비/상태 창이 열려 있을 때 성황령 창이 8번 내리 안 떴다 (2026-10-13 04:03). 가방을 열었다 닫으니 떴다
+    wind.tap("i")
+    time.sleep(0.3)
+    wind.tap("esc")
+    time.sleep(0.3)
     for key in KEYS["revive"]:
         wind.tap(key)
     time.sleep(0.5)
@@ -1020,6 +1163,104 @@ BORN = time.monotonic()
 RENEW_SECONDS = 2400
 
 
+def release_held():
+    """누르고 있던 기본 공격 키를 떼고, 열려 있는 선택창을 닫는다."""
+    if KEYS.get("basic"):
+        wind._post(wind.KEYCODES[KEYS["basic"]], False)
+    wind.tap("esc")
+    time.sleep(0.2)
+def castle_of(name):
+    """흉가 묶음 이름("제2상곡흉가")에서 성 이름("상곡")."""
+    found = re.fullmatch(r"(?:제\d+)?(.+?)흉가.*", name or "")
+    return found[1] if found else "상곡"
+
+
+def choose_haunt(castle):
+    """지금 서 있는 성(castle, 예: "상곡")에서 "/출 흉가"를 쳐 빈 묶음을 골라 haunt에 넣는다. 골랐으면 True.
+
+    "/출 흉가"는 **지금 있는 성의 흉가만** 보여 준다 (사용자: "부여성에서 치면 부여성 흉가를 알려 주잖아").
+    처음에는 한 번 치면 모든 성이 나오는 줄 알고 부여성에서 쳤다가, 사람이 있는 제2천안궁흉가에 들어갔다 (2026-10-13 21:03).
+    규칙 (사용자): 웬만하면 제2, 제2에 누가 있으면 그 성의 다른 묶음 ([haunt_doors]에 적은 차례).
+    결과를 믿을 수 없으면 (못 읽은 줄, 끝을 못 찾음) 빈 곳이 없는 것으로 친다.
+    """
+    global haunt, marker_due
+    doors = [int(group) for group in wind.CONFIG.get("haunt_doors", {})]
+    import haunts
+    taken, unsure = haunts.ask()
+    for full in os.environ.get("WIND_FAKE_FULL", "").split(","):  # 시험용: 이 성들은 꽉 찬 것으로 친다
+        if full == castle:
+            taken = set(doors)
+    free = [] if unsure else [group for group in doors if group not in taken]
+    note = " (결과를 믿을 수 없다)" if unsure else ""
+    if not free:
+        print(f"   {castle}성 /출 흉가: 사람이 있는 묶음 {sorted(taken) or '없음'}{note} → 빈 곳이 없다", flush=True)
+        return False
+    pick = 2 if 2 in free else free[0]
+    haunt = f"{castle}흉가" if pick == 1 else f"제{pick}{castle}흉가"
+    marker_due = True
+    print(f"   {castle}성 /출 흉가: 사람이 있는 묶음 {sorted(taken) or '없음'} → {haunt}로 간다", flush=True)
+    return True
+
+
+def find_haunt(castle, ports, sizes):
+    """castle 성에서 시작해 빈 흉가가 있는 성을 찾아간다 (설정 haunt_castles 차례: 상곡, 천안궁, 어양, 관령, 범안).
+
+    성마다 도착해서 "/출 흉가"를 친다. 빈 곳이 있으면 haunt를 정하고 그 성 이름("부여천안궁성")을 돌려준다.
+    다섯 성이 모두 차 있으면 마지막 성에서 1분마다 다시 쳐 보며 기다린다.
+    """
+    order = nav.haunt_castles(castle)
+    here = castle
+    for target in order[order.index(castle):]:
+        if target != here:
+            print(f"   {here}성은 꽉 찼다. 세계지도로 {target}성에 간다", flush=True)
+            try:
+                nav.world_hop(f"부여{here}성", f"부여{target}성", ports, sizes)
+            except RuntimeError as error:
+                print(f"   {target}성으로 못 갔다: {error}. {here}성에서 기다린다", flush=True)
+                break
+            time.sleep(wind.ROAM["map_wait"])
+            here = target
+        if choose_haunt(here):
+            return f"부여{here}성"
+    while True:
+        print(f"   다섯 성이 다 찼다. {here}성에서 1분 뒤 다시 본다 ({time.strftime('%H:%M:%S')})", flush=True)
+        time.sleep(60)
+        wait_for_game()
+        if choose_haunt(here):
+            return f"부여{here}성"
+
+
+def sell_if_full(home, ports, sizes):
+    """10번 방에서 나와 성(home)에 도착했을 때 가방을 본다. 호박이 100개면 부여장터에 팔고 온다. 사냥할 성 이름을 돌려준다.
+
+    호박은 100개까지만 가질 수 있다 (100개일 때 또 주우려 하면 "호박 100개 이상 가질 수 없습니다"가 뜬다).
+    처음에는 주울 때마다 봤는데, 사용자가 "10번 방에서 나갈 때마다 확인하고 100개면 팔러 가기"로 정했다 (2026-10-13).
+    가방 세 쪽을 넘겨 가며 "호박 100개" 글자를 찾는다 (market.watch_pumpkins). 왕복은 93초쯤 걸린다.
+    팔고 나면 첫 성(상곡성)으로 돌아와 빈 흉가를 찾는다 (find_haunt).
+    """
+    if not KEYS.get("buyeo_scroll") or not nav.is_castle(home):
+        return home
+    import market
+    forced = os.environ.pop("WIND_FORCE_SELL", None)  # 시험용: 한 번만 강제로 팔러 간다
+    if not market.watch_pumpkins(0) and not forced:
+        return home
+    print(f"   호박이 100개 찼다. 부여장터에 팔러 간다 ({time.strftime('%H:%M:%S')})", flush=True)
+    release_held()
+    first = nav.haunt_castles()[0]
+    for attempt in range(1, 4):
+        try:
+            market.sell(f"부여{first}성")  # 부여성비서는 어디서든 써지므로, 중간에 틀어져도 처음부터 다시 하면 된다
+            break
+        except (RuntimeError, wind.Abort) as error:
+            print(f"{time.strftime('%H:%M:%S')} 장터 왕복 {attempt}번째 실패: {error}. 화면 {save_status('error')}", flush=True)
+            if attempt == 3:
+                raise
+            time.sleep(5)
+            wait_for_game()
+    print(f"   호박을 팔고 부여{first}성에 왔다. 상태창 {save_status()}", flush=True)
+    return find_haunt(first, ports, sizes)
+
+
 def circuit(here):
     """here(지금 있는 맵)에서 시작해 끝없이 돈다.
 
@@ -1027,7 +1268,7 @@ def circuit(here):
     → … → 제4 묶음 → 다시 1번 묶음. 방 안에서만 사냥하고, 성과 입구에서는 걷기만 한다.
     here는 성 이름, 입구 이름, 방 이름 어느 것이든 된다. 방에서 시작하면 그 묶음의 그 방부터 이어 간다.
     """
-    global current_room, active, haunt
+    global current_room, active, haunt, marker_due
     ports, sizes = nav.load_ports()
     fighter = active = Fighter()
     fighter.ports, fighter.sizes = ports, sizes
@@ -1054,24 +1295,43 @@ def circuit(here):
                   f"헬파이어 때 마력 {fighter.hellfire_mana[-8:]})", flush=True)
             fighter.room = here
             fighter.steps = HUNT["scan_every"]
+            entered, exp_in = time.monotonic(), read_exp()
             try:
                 leave(here, cell, ports, sizes, fighter)
             except RuntimeError as error:
                 if "싸우는 중에 맵이 바뀌었다" not in str(error):
                     raise
                 print(f"   {error} → {following}에 온 것으로 보고 이어 간다", flush=True)
+            exp_out = read_exp()
+            gained = f"경험치 +{exp_out - exp_in:,}" if exp_in and exp_out and exp_out >= exp_in else "경험치는 못 읽었다"
+            print(f"   방 기록: {here} {time.monotonic() - entered:.0f}초, {gained} (지금 {exp_out})", flush=True)
             if number == LAST_ROOM:
                 laps += 1
+                print(f"   바퀴 기록 {time.strftime('%H:%M:%S')}:{lap_report() or ' (시작을 못 적었다)'}", flush=True)
                 print(f"   흉가 한 바퀴 끝 {time.strftime('%H:%M:%S')} ({laps}번 돎). 상태창 {save_status()}", flush=True)
+                following = sell_if_full(following, ports, sizes)
         elif here.endswith("흉가입구"):
             if haunt is None:
                 raise RuntimeError("어느 흉가 묶음을 돌지 모른다. --haunt=제2상곡흉가 처럼 알려 줘야 한다")
             following = f"{haunt}1"
-            cell = next(c for c, d in ports[here].items() if d == following)
+            number = str(int(re.match(r"제(\d+)", haunt)[1]) if haunt.startswith("제") else 1)
+            door = wind.CONFIG.get("haunt_doors", {}).get(number)
+            cell = tuple(door[:2]) if door else next(c for c, d in ports[here].items() if d == following)
             print(f"== {here} → {following} ({elapsed:.0f}초)", flush=True)
             fighter.room = None
+            if marker_due and door and KEYS.get("drop_marker"):
+                # 고른 묶음의 입구 앞에 노란비서를 한 장 버리고 들어간다 (d, t. 수량은 안 묻고 한 장이 발밑에 떨어진다)
+                nav.go(here, tuple(door[2:]), ports, sizes, near=0)
+                for key in KEYS["drop_marker"]:
+                    wind.tap(key)
+                    time.sleep(0.4)
+                if wind.prompt_open():
+                    wind.tap("esc")
+                print(f"   {tuple(door[2:])}에 노란비서를 버렸다", flush=True)
+            marker_due = False
             if nav.go(here, cell, ports, sizes) != "left":
                 raise RuntimeError(f"{here}의 {cell}을 밟았는데 맵이 안 바뀌었다")
+            lap_start()
         elif room:
             group = int(re.match(r"제(\d+)", here)[1]) if here.startswith("제") else 1
             number = int(room[3])
@@ -1153,6 +1413,20 @@ if __name__ == "__main__":
     haunt = next((arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--haunt=")), None)
     print(f"시작 {time.strftime('%Y-%m-%d %H:%M:%S')} {current_room}" + (" (밤새 모드)" if overnight else ""), flush=True)
     errors = deaths = 0
+    if os.environ.pop("WIND_PICK", None) and haunt and (nav.is_castle(current_room) or current_room.endswith("흉가입구")):
+        # 성이나 흉가입구에서 켤 때: "/출 흉가"로 빈 묶음을 골라, 그 입구 앞에 노란비서를 버리고 들어간다.
+        # (손으로 "/출 흉가"만 치고 매크로를 따로 켰더니 노란비서 버리기가 빠졌다. 2026-10-13 21:08)
+        wait_for_game()
+        if nav.is_castle(current_room):
+            current_room = find_haunt(castle_of(haunt), *nav.load_ports())
+        elif not choose_haunt(castle_of(haunt)):
+            print("이 성에는 빈 흉가가 없다. 끝낸다 (성에서 켜면 다른 성으로 찾아간다)", flush=True)
+            release_keys()
+    if os.environ.get("WIND_FORCE_SELL") and haunt:
+        # 시험용: 켜자마자 장터에 다녀온다 (팔기 → 상곡성 → /출 흉가 → 입구 앞에 노란비서 → 사냥)
+        wait_for_game()
+        castle = re.fullmatch(r"(?:제\d+)?(.+?)흉가.*", haunt)
+        current_room = sell_if_full(f"부여{castle[1]}성", *nav.load_ports())
     while True:
         if wind.game_window() is None:
             print(f"{time.strftime('%H:%M:%S')} 게임 창을 기다린다", flush=True)
@@ -1173,11 +1447,20 @@ if __name__ == "__main__":
             if not (overnight and KEYS.get("revive")) or deaths > 20:
                 print("끝낸다", flush=True)
                 release_keys()
-            try:
-                current_room = revive()
-            except Exception as error:
-                print(f"{time.strftime('%H:%M:%S')} 되살아나지 못했다: {error}. 끝낸다. 화면 {save_status('dead')}", flush=True)
-                release_keys()
+            # 죽은 직후에는 성황령이 안 먹는 때가 있다: 세 번의 죽음 모두 첫 시도는 "성황당 자리가 아니다"로 실패하고
+            # 20초쯤 뒤 다시 켠 뒤에야 됐다 (2026-10-11 18:36, 10-12 06:10, 08:12). 끝내지 않고 쉬었다 다시 한다
+            for attempt in range(1, 9):
+                try:
+                    current_room = revive(castle_of(haunt))  # 사냥하던 성의 성황당으로 간다
+                    break
+                except Dead:
+                    raise
+                except Exception as error:
+                    if attempt == 8:
+                        print(f"{time.strftime('%H:%M:%S')} 되살아나지 못했다: {error}. 끝낸다. 화면 {save_status('dead')}", flush=True)
+                        release_keys()
+                    print(f"{time.strftime('%H:%M:%S')} 부활 {attempt}번째 시도 실패: {error}. 8초 뒤 다시 한다", flush=True)
+                    time.sleep(8)
         except Exception as error:
             if "좌표를 읽지 못했다" in str(error):
                 print(f"{time.strftime('%H:%M:%S')} 좌표가 안 읽혀서 잠깐 쉬고 다시 한다 ({current_room})", flush=True)
