@@ -1032,8 +1032,10 @@ def lap_report():
     began = json.loads(LAP_FILE.read_text())
     LAP_FILE.unlink()
     minutes, now = (time.time() - began["time"]) / 60, read_exp()
-    if not began.get("exp") or not now or not 5 < minutes < 180:
-        return f" 한 바퀴 {minutes:.1f}분 (경험치는 못 읽었다)"
+    if not 5 < minutes < 60:
+        return f" (시작 기록이 {minutes:.0f}분 전 것이라 버린다)"  # 껐다 켠 사이의 것이다
+    if not began.get("exp") or not now or now < began["exp"]:
+        return f" 한 바퀴 {minutes:.1f}분 (경험치는 못 읽었다. 그 사이 경험치를 썼을 수도 있다)"
     gain = now - began["exp"]
     return f" 한 바퀴 {minutes:.1f}분, 경험치 +{gain:,} (분당 {gain / minutes / 10000:,.0f}만)"
 
@@ -1086,6 +1088,8 @@ def check_map(here):
                 return other.stem
         if not mine.exists() or retry == 25:
             break
+        if wind.close_notice():
+            print(f"   {time.strftime('%H:%M:%S')} 맵 이름을 덮은 알림 띠를 닫았다", flush=True)
         time.sleep(0.4)
         title = wind.snapshot("map_name") or title
     if mine.exists():
@@ -1220,6 +1224,8 @@ def find_haunt(castle, ports, sizes):
                 break
             time.sleep(wind.ROAM["map_wait"])
             here = target
+            # 처음 가는 성이면 맵 이름 그림을 저장해 둔다. 안 그러면 다음에 그 성에서 켤 때 어디인지 모른다 (2026-10-15 범안성)
+            check_map(f"부여{here}성")
         if choose_haunt(here):
             return f"부여{here}성"
     while True:

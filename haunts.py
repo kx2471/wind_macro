@@ -34,6 +34,18 @@ def glyphs():
 
 SLOTS = (13, 39, 65, 91, 117)  # 대화 칸 다섯 줄의 글자가 시작하는 y
 
+# 그 성의 흉가에 아무도 없으면 결과 줄 대신 "결과가 없습니다." 한 줄이 나온다 (2026-10-15 05:56 새벽).
+# 이걸 몰라서 "못 읽음 → 꽉 참"으로 보고 다섯 성을 돌다가 범안성에서 기다렸다
+NO_RESULT = -9
+_nothing = None
+
+
+def no_result():
+    global _nothing
+    if _nothing is None:
+        _nothing = np.load(DATA / "chat_noresult.npy")
+    return _nothing
+
 
 def lines(picture):
     """대화 칸 그림(RGB)의 다섯 줄을 위에서부터: 결과 줄이면 묶음 번호, 보라색인데 결과 줄이 아니면 0, 다른 줄이면 None.
@@ -55,6 +67,10 @@ def lines(picture):
         if not 0 <= slot < len(SLOTS) or band.shape[0] < 22 or band.sum() < 60:
             continue
         x = int(np.nonzero(band.any(0))[0][0])  # 첫 글자가 시작하는 칸
+        nothing = no_result()
+        if band[:, x:x + nothing.shape[1]].shape == nothing.shape and (band[:, x:x + nothing.shape[1]] != nothing).sum() <= 30:
+            found[slot] = NO_RESULT
+            continue
         group, start = 1, x
         if (band[:, x:x + 24] != je).sum() <= 6:
             errors = [(band[:, x + 24:x + 36] != digit).sum() for digit in digits]
@@ -101,6 +117,8 @@ def recent(picture):
 def occupied(picture):
     """(사람이 있는 묶음 번호들, 못 믿겠는가). 저장된 그림 한 장만 볼 때 쓴다 (스크롤은 ask가 한다)."""
     run, anchored = below_command(picture)
+    if run == [NO_RESULT]:
+        run = []  # "결과가 없습니다" = 아무도 없다
     return {group for group in run if group > 0}, not anchored or any(group <= 0 for group in run)
 
 
@@ -167,6 +185,8 @@ def ask():
         if picture is None:
             raise wind.Abort
         run, anchored = below_command(picture)
+        if anchored and run == [NO_RESULT]:
+            run = []  # "결과가 없습니다" = 이 성의 흉가에 아무도 없다
         taken |= {group for group in run if group > 0}
         if any(group <= 0 for group in run):
             unsure = True

@@ -274,9 +274,12 @@ def drag(start, end, plain=False, slack=SLACK):
         Quartz.CGEventPost(tap, event)
 
     def glide(a, b, steps):
+        # 한 번에 5픽셀 넘게 움직이지 않는다. 빨리 끌면(한 번에 18픽셀) 몬스터가 16픽셀쯤 뒤처진 채 놓였다
+        # (2026-10-14 08:40, 480픽셀을 24번에). 천천히 끈 것(한 번에 3 ~ 5픽셀)은 그대로 따라왔다
+        steps = max(steps, int(math.hypot(b[0] - a[0], b[1] - a[1]) / 5) + 1)
         for step in range(1, steps + 1):
             post(Quartz.kCGEventLeftMouseDragged, a[0] + (b[0] - a[0]) * step / steps, a[1] + (b[1] - a[1]) * step / steps)
-            time.sleep(0.025)
+            time.sleep(0.012)
 
     far = math.hypot(end[0] - start[0], end[1] - start[1])
     way = ((end[0] - start[0]) / far, (end[1] - start[1]) / far) if far >= 1 else (0.0, -1.0)  # 제자리면 위로 갔다 온다
@@ -385,7 +388,7 @@ def live():
 
     close = lambda: abs(goal[0] - at[0]) <= 5 and abs(goal[1] - at[1]) <= 5
     slack = SLACK
-    for attempt, plain in enumerate((False, False, True), 1):
+    for attempt, plain in enumerate((False, False, False, True), 1):
         off = (goal[0] - at[0], goal[1] - at[1])
         hold = (start[0] + at[0] - box[0], start[1] + at[1] - box[1])  # 몬스터가 옮겨졌으면 잡을 점도 같이 옮긴다
         print(f"  끌기 {attempt}: 몬스터 왼쪽 위 {at} → {goal}, 잡는 점 {hold}, 문턱 {slack}" + (" (다른 방식)" if plain else ""), flush=True)
@@ -395,13 +398,9 @@ def live():
         look()  # 끈 뒤 실제로 어디 놓였는지 본다
         if close():
             break
-        far = (off[0] ** 2 + off[1] ** 2) ** 0.5
-        if at == before:
-            slack = min(40, slack + 10)  # 전혀 안 움직였다. 문턱이 더 큰가 보다
-        elif far > 30:
-            # 가는 방향으로 얼마나 모자랐는지(음수면 넘쳤는지) 재서 문턱 값을 고친다
-            short = ((goal[0] - at[0]) * off[0] + (goal[1] - at[1]) * off[1]) / far
-            slack = max(0, min(40, int(round(slack + short))))
+        # 보정은 남은 거리만큼만 끈다 (뒤처지는 양을 더하지 않는다). 짧게 끌 때는 몬스터가 그대로 따라온다.
+        # 첫 끌기에서 잰 "모자란 양"을 짧은 보정에도 더했더니 보정할 때마다 20픽셀씩 넘쳐서 왔다 갔다 했다 (2026-10-14 08:40)
+        slack = 10 if at == before else 0  # 전혀 안 움직였을 때만 더 멀리 끌어 본다
     moved = close()
     if now is not None:
         np.save(OUT / f"{stamp}-placed.npy", now.astype(np.uint8))

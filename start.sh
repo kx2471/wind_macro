@@ -13,6 +13,7 @@ print(next((f.stem for f in Path("data/titles").glob("*.bin") if title and f.rea
 PY
 )
 if [ -z "$room" ]; then echo "지금 맵을 모르겠다 (게임 창이 화면에 보여야 한다)"; exit 1; fi
+rm -f logs/lap.json   # 바퀴 시작 기록은 새로 켤 때 지운다 (껐다 켠 사이의 시간과 경험치가 섞이지 않게)
 log="logs/haunt-$(date +%m%d-%H%M%S).log"
 # 돌 흉가 묶음: 방 안이면 그 방의 묶음, 성이나 입구면 그 성의 제2 묶음 (다른 성의 흉가에서 다시 켜도 맞게)
 haunt=$(python3 - "$room" <<'PY'

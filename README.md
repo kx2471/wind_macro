@@ -93,7 +93,7 @@ python3 -m venv .venv
 | `FINDINGS.md` | 시험하며 알아낸 사실과 측정 기록 |
 | `MAPS.md` | 맵과 이동 경로 정리 |
 
-`macro.py`, `xy.py` 등 나머지 파일은 이전 Windows용(Tesseract 기반) 매크로입니다.
+이전 Windows용(Tesseract 기반) 매크로 파일들은 지웠습니다. 필요하면 git 기록(`d42dd0f` 이전)에서 볼 수 있습니다.
 
 ## 알아 둘 점
 

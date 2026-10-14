@@ -320,6 +320,35 @@ def refocus():
     time.sleep(0.2)
 
 
+NOTICE = (71, 160, 178)  # 창 위에 뜨는 알림 띠 색 (하늘색)
+
+
+def close_notice():
+    """창 위쪽에 뜨는 하늘색 알림 띠("무중단 패치가 완료되었습니다" 등)가 있으면 오른쪽 X를 눌러 닫는다. 닫았으면 True.
+
+    띠가 맵 이름 자리(창 기준 y=62)를 덮어서 맵을 못 알아보고 7분 동안 오류만 되풀이했다 (2026-10-14 13:31).
+    띠는 창 기준 y 33~88, X 단추는 (1890, 62)에 있다.
+    """
+    origin = game_window()
+    if origin is None:
+        return False
+    for x in (300, 1600):
+        shot = grab(x, 50, 1, 1)
+        if shot is None:
+            return False
+        b, g, r = shot[0][0], shot[0][1], shot[0][2]
+        if max(abs(r - NOTICE[0]), abs(g - NOTICE[1]), abs(b - NOTICE[2])) > 12:
+            return False
+    point = (origin[0] + 1890, origin[1] + 62)
+    for kind in (Quartz.kCGEventMouseMoved, Quartz.kCGEventLeftMouseDown, Quartz.kCGEventLeftMouseUp):
+        event = Quartz.CGEventCreateMouseEvent(None, kind, point, Quartz.kCGMouseButtonLeft)
+        Quartz.CGEventSetIntegerValueField(event, Quartz.kCGEventSourceUserData, MAGIC)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+        time.sleep(0.05)
+    time.sleep(0.5)
+    return True
+
+
 def prompt_open():
     """화면 아래 입력줄(대상 선택창이나 채팅창)이 열려 있는지. 열리면 줄 전체가 흰색이 된다."""
     shot = snapshot("input_line")
