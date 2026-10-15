@@ -23,5 +23,9 @@ for i in $(seq 1 $(( ${MAX:-120} / 2 ))); do   # 길어도 MAX초(기본 2분) �
   if [ "$(.venv/bin/python minigame.py 2>/dev/null | tail -1 | cut -d' ' -f1)" = "minigame" ]; then gone=0; else gone=$((gone + 1)); fi
   if [ $gone -ge 2 ]; then break; fi
 done
+# 매크로가 아직 멈춰 있을 때 메시지창에서 "성공하였습니다."를 찾는다 (매크로가 돌면 새 메시지에 밀려 올라간다)
+if [ "${SOLVE:-1}" = "1" ] && [ "$pattern" = "hunt.py" ]; then
+  .venv/bin/python minigame_result.py >> logs/minigame.log 2>&1
+fi
 pkill -CONT -f "$pattern"
 echo "$(date +%T) 창이 사라져 매크로를 다시 움직인다" >> logs/minigame.log

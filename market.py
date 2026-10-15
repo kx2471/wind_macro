@@ -122,7 +122,15 @@ def sell(home="부여상곡성"):
     time.sleep(wind.ROAM["map_wait"])
     arrive("부여장터")
     print(f"  부여장터 {nav.position()}", flush=True)
-    nav.go("부여장터", (22, 40), ports, sizes, near=0)
+    # (22, 40)에 다른 사람이 서서 팔고 있으면 못 들어가 그 자리를 158번 맴돌았다 (2026-10-15 14:54).
+    # 바로 아래 (22, 41)에서 말해도 장돌뱅이가 산다. 그래서 한 칸 옆까지만 가도 되게 한다
+    try:
+        nav.go("부여장터", (22, 40), ports, sizes, near=0, max_steps=60)
+    except RuntimeError as error:
+        x, y = nav.position()
+        if abs(x - 22) + abs(y - 40) > 1:
+            raise
+        print(f"  (22, 40)에 못 들어갔다 ({error}). 옆 칸 {(x, y)}에서 판다", flush=True)
     for words in WORDS:
         say(words)
     if wind.prompt_open():
