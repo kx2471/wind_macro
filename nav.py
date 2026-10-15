@@ -393,7 +393,7 @@ def go(map_name, goal, ports=None, sizes=None, max_steps=1500, near=NEAR, before
                 # 출구 칸은 좌표가 먼저 바뀌고 맵이 조금 뒤에 바뀐다
                 time.sleep(wind.ROAM["map_wait"])
                 if map_changed(map_image):
-                    print(f"  {goal}을 밟고 맵이 바뀌었다. 도착 좌표 {read_position()}")
+                    print(f"  {time.strftime('%H:%M:%S')} {goal}을 밟고 맵이 바뀌었다. 도착 좌표 {read_position()}", flush=True)
                     last_exit = goal
                     return "left"
                 return "arrived"
@@ -430,7 +430,7 @@ def go(map_name, goal, ports=None, sizes=None, max_steps=1500, near=NEAR, before
             if map_changed(map_image):
                 if abs(target[0] - goal[0]) + abs(target[1] - goal[1]) <= near:
                     time.sleep(wind.ROAM["map_wait"])
-                    print(f"  {target}을 밟고 맵이 바뀌었다. 도착 좌표 {read_position()}")
+                    print(f"  {time.strftime('%H:%M:%S')} {target}을 밟고 맵이 바뀌었다. 도착 좌표 {read_position()}", flush=True)
                     last_exit = target
                     return "left"
                 print(f"  {target}을 밟았더니 다른 맵으로 갔다. 자료에 없는 출구 → 돌아 나온다")

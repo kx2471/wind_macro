@@ -1080,12 +1080,12 @@ def check_map(here):
     # 아는 맵 이름과 안 맞으면 바로 판단하지 않고 10초까지 다시 읽는다. 한 시간마다 뜨는 "N시간 동안 플레이하였습니다"
     # 안내 상자가 맵 이름을 몇 초 덮는다 (2026-10-12 03:57, 05:57에 이것 때문에 오류가 났다)
     for retry in range(26):
-        if mine.exists() and mine.read_bytes()[:len(title)] == title:
+        if mine.exists() and wind.same_title(mine.read_bytes(), title):
             return here
-        for other in TITLES.glob("*.bin"):
-            if other.read_bytes()[:len(title)] == title:
-                print(f"   지금 맵은 {here}이 아니라 {other.stem}이다. 거기서 이어 간다", flush=True)
-                return other.stem
+        other = wind.title_name(title, TITLES)  # 모니터 색 설정에 따라 픽셀이 조금 다를 수 있어 바이트를 그대로 견주지 않는다
+        if other:
+            print(f"   지금 맵은 {here}이 아니라 {other}이다. 거기서 이어 간다", flush=True)
+            return other
         if not mine.exists() or retry == 25:
             break
         if wind.close_notice():
@@ -1287,7 +1287,10 @@ def circuit(here):
             print(f"{time.strftime('%H:%M:%S')} 메모리를 비우려고 새로 띄운다 ({here})", flush=True)
             extra = [f"--haunt={haunt}"] if haunt else []
             os.execv(sys.executable, [sys.executable, "-u", sys.argv[0], here, "--overnight", *extra])
+        checked = time.monotonic()
         here = check_map(here)
+        if time.monotonic() - checked > 2:  # 방에 들어와 20초쯤 서 있던 원인을 찾는 중 (2026-10-15)
+            print(f"   {time.strftime('%H:%M:%S')} 맵 확인에 {time.monotonic() - checked:.1f}초 걸렸다", flush=True)
         current_room = here
         elapsed = time.monotonic() - started
         room = nav.ROOM.fullmatch(here)
@@ -1310,7 +1313,7 @@ def circuit(here):
                 print(f"   {error} → {following}에 온 것으로 보고 이어 간다", flush=True)
             exp_out = read_exp()
             gained = f"경험치 +{exp_out - exp_in:,}" if exp_in and exp_out and exp_out >= exp_in else "경험치는 못 읽었다"
-            print(f"   방 기록: {here} {time.monotonic() - entered:.0f}초, {gained} (지금 {exp_out})", flush=True)
+            print(f"   {time.strftime('%H:%M:%S')} 방 기록: {here} {time.monotonic() - entered:.0f}초, {gained} (지금 {exp_out})", flush=True)
             if number == LAST_ROOM:
                 laps += 1
                 print(f"   바퀴 기록 {time.strftime('%H:%M:%S')}:{lap_report() or ' (시작을 못 적었다)'}", flush=True)

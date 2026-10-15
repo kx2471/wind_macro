@@ -13,6 +13,8 @@ snap() {
 # 사냥 매크로를 570초 동안 지켜본다. 꺼져 있으면 다시 켠다 (F7로 끈 경우는 다시 켜지 않는다). 끝에 요약을 찍는다.
 cd "$(dirname "$0")"
 mkdir -p logs/watch logs/suspect
+# 게임 창이 있는 모니터를 찍는다 (오른쪽 모니터로 옮겨도 되게, 2026-10-15)
+D=$(.venv/bin/python -c "import wind; print(wind.game_display())" 2>/dev/null || echo 1)
 lastL=""; lastn=0; found=""
 touch logs/minigame.log; minilines=$(wc -l < logs/minigame.log | tr -d ' ')
 # 세워 둔 채로 남지 않게: 다시 움직이게 할 도우미가 안 돌고 있으면 매크로를 깨운다
@@ -20,7 +22,7 @@ pgrep -f minigame_pause.sh > /dev/null || pkill -CONT -f "hunt.py"
 for i in $(seq 1 38); do
   # 15초마다 화면을 한 장 남긴다 (최근 3시간치). 미니게임 창 같은 것이 떴을 때 무엇이었는지 나중에 볼 수 있게
   shot="logs/watch/$(date +%m%d-%H%M%S).jpg"
-  snap -x -t jpg "$shot" && sips -Z 1280 "$shot" > /dev/null 2>&1
+  snap -x -D "$D" -t jpg "$shot" && sips -Z 1280 "$shot" > /dev/null 2>&1
   find logs/watch -name '*.jpg' -mmin +180 -delete 2>/dev/null
   # 평소에 드문 줄(맵 이름 가림, 선택창이 안 뜸, 키가 안 먹음, 오류)이 새로 찍혔으면 그 화면을 logs/suspect/에 따로 둔다
   cur=$(ls -t logs/haunt-*.log | head -1); n=$(wc -l < "$cur" | tr -d ' ')
@@ -28,7 +30,7 @@ for i in $(seq 1 38); do
     odd=$(tail -n +$((lastn + 1)) "$cur" | grep -a '가려졌다\|선택창이 안 떴다\|싸우는 중에 맵이\|오류 \|입력창이 열려\|Esc가 안 먹\|힐이 안 먹' | tail -1 | cut -c1-90)
     if [ -n "$odd" ]; then
       cp "$shot" "logs/suspect/$(basename "$shot")" 2>/dev/null
-      case "$odd" in *"선택창이 안 떴다"*) snap -x "logs/suspect/full-$(date +%m%d-%H%M%S).png" 2>/dev/null;; esac
+      case "$odd" in *"선택창이 안 떴다"*) snap -x -D "$D" "logs/suspect/full-$(date +%m%d-%H%M%S).png" 2>/dev/null;; esac
       echo "$(date +%T) 눈여겨볼 줄: $odd → 화면 logs/suspect/$(basename "$shot")"
     fi
   fi

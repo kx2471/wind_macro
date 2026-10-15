@@ -72,7 +72,7 @@ def name_of(title):
 def shot(tag):
     path = out / f"{time.strftime('%H%M%S')}-{tag}.jpg"
     try:
-        subprocess.run(["screencapture", "-x", "-t", "jpg", str(path)], timeout=10)
+        subprocess.run(["screencapture", "-x", "-D", str(wind.game_display()), "-t", "jpg", str(path)], timeout=10)
         subprocess.run(["sips", "-Z", "1280", str(path)], capture_output=True, timeout=10)
     except subprocess.TimeoutExpired:
         pass

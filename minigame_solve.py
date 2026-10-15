@@ -231,8 +231,9 @@ def where(panel):
 def snap(path):
     """화면을 찍되 10초가 넘으면 그만둔다 (screencapture가 매달려 감시가 멈춘 적이 있다, 2026-10-13)."""
     import subprocess
+    import wind
     try:
-        subprocess.run(["screencapture", "-x", str(path)], timeout=10)
+        subprocess.run(["screencapture", "-x", "-D", str(wind.game_display()), str(path)], timeout=10)  # 게임 창이 있는 모니터
     except subprocess.TimeoutExpired:
         print("  화면 찍기가 10초 넘게 걸려서 그만뒀다")
 

@@ -26,10 +26,7 @@ TO_WORLD = [(115, 13), (115, 0)]
 
 def where():
     title = wind.snapshot("map_name")
-    for file in nav.TITLES.glob("*.bin"):
-        if title and file.read_bytes()[:len(title)] == title:
-            return file.stem
-    return None
+    return wind.title_name(title, nav.TITLES)
 
 
 def arrive(name, wait=6.0):

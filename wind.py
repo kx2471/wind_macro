@@ -61,15 +61,22 @@ def game_window():
     if now - _window_cache[0] < 0.2:
         return _window_cache[1]
     origin = None
-    options = Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements
-    # 화면 서버가 죽었거나 화면이 잠겨 있으면 None이 온다
-    for w in Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or ():
-        if w.get("kCGWindowLayer") != 0:
-            continue
-        if w.get("kCGWindowOwnerName") == APP_NAME:
-            bounds = w["kCGWindowBounds"]
-            origin = (bounds["X"], bounds["Y"])
-        break  # 레이어 0의 첫 창이 맨 앞 창
+    # 키 입력을 받는 앱(활성 앱)이 게임인지로 본다. 예전에는 "레이어 0의 첫 창이 게임 창인가"로 봤는데,
+    # 본 모니터에 Chrome을 전체화면으로 띄우고 오른쪽 모니터의 게임을 눌러 게임이 활성 앱인데도
+    # 창 목록 맨 앞에는 Chrome 창이 있어서 멈춰 있었다 (2026-10-15 20:09)
+    from AppKit import NSDate, NSRunLoop, NSWorkspace
+    # 이벤트 루프를 잠깐 돌려야 활성 앱이 바뀐 것을 알아챈다 (안 돌리면 처음 본 앱에 머문다)
+    NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.005))
+    front = NSWorkspace.sharedWorkspace().frontmostApplication()
+    if front is not None and front.localizedName() == APP_NAME:
+        options = Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements
+        # 화면 서버가 죽었거나 화면이 잠겨 있으면 None이 온다
+        for w in Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or ():
+            if w.get("kCGWindowLayer") == 0 and w.get("kCGWindowOwnerName") == APP_NAME:
+                bounds = w["kCGWindowBounds"]
+                if bounds["Width"] > 800:  # 게임 화면 창 (작은 보조 창이 있으면 건너뛴다)
+                    origin = (bounds["X"], bounds["Y"])
+                    break
     _window_cache = (now, origin)
     return origin
 
@@ -205,6 +212,40 @@ def snapshot(region):
     """화면의 고정된 UI 영역이 바뀌었는지 비교할 때 쓰는 픽셀 값."""
     shot = grab(*REGIONS[region])
     return shot and shot[0]
+
+
+def same_title(saved, title):
+    """저장해 둔 맵 이름 그림(saved)과 지금 찍은 그림(title)이 같은 맵인가.
+
+    처음에는 바이트가 똑같아야 같은 맵으로 봤는데, 게임 창을 오른쪽 모니터로 옮겼더니 모니터 색 설정 때문에
+    같은 그림이 픽셀마다 1~2씩 달라져서 아는 맵을 못 알아봤다 (2026-10-15). 다른 맵이면 글자 자리에서 100 넘게 차이 난다.
+    """
+    if not title or len(saved) < len(title):
+        return False
+    a = np.frombuffer(saved[:len(title)], np.uint8)
+    b = np.frombuffer(title, np.uint8)
+    return int(np.abs(a.astype(np.int16) - b.astype(np.int16)).max()) <= 8
+
+
+def title_name(title, folder=Path(__file__).parent / "data" / "titles"):
+    """맵 이름 그림이 저장된 맵 중 어느 것인지. 모르면 None."""
+    for file in sorted(folder.glob("*.bin")):
+        if same_title(file.read_bytes(), title):
+            return file.stem
+    return None
+
+
+def game_display():
+    """게임 창이 있는 모니터 번호 (screencapture -D에 넣는 1부터 세는 번호). 모르면 1 (메인)."""
+    for w in Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID) or ():
+        if w.get("kCGWindowOwnerName") == APP_NAME and w.get("kCGWindowLayer") == 0:
+            b = w["kCGWindowBounds"]
+            cx, cy = b["X"] + b["Width"] / 2, b["Y"] + b["Height"] / 2
+            for index, display in enumerate(Quartz.CGGetActiveDisplayList(16, None, None)[1]):
+                r = Quartz.CGDisplayBounds(display)
+                if r.origin.x <= cx < r.origin.x + r.size.width and r.origin.y <= cy < r.origin.y + r.size.height:
+                    return index + 1
+    return 1
 
 
 # ---------------------------------------------------------------- 키 입력
