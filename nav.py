@@ -149,7 +149,9 @@ def map_changed(map_image, wait=10.0):
     known = [path.read_bytes() for path in TITLES.glob("*.bin")]
     until = time.monotonic() + wait
     while time.monotonic() < until:
-        if now is not None and any(title[:len(now)] == now for title in known):
+        # 바이트를 그대로 견주면 오른쪽 모니터(색 설정이 다름)에서는 아는 맵도 모르는 그림이 되어,
+        # 방에 들어갈 때마다 10초씩 서서 기다렸다 (2026-10-15 ~ 16, 한 바퀴 26분 → 30분)
+        if now is not None and any(wind.same_title(title, now) for title in known):
             return True
         time.sleep(0.4)
         now = wind.snapshot("map_name")

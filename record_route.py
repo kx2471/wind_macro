@@ -61,7 +61,7 @@ def listen():
 
 def name_of(title):
     for known, name in titles.items():
-        if known[:len(title)] == title:
+        if wind.same_title(known, title):
             return name
     name = f"새맵{sum(1 for n in titles.values() if n.startswith('새맵')) + 1}"
     titles[title] = name

@@ -1067,6 +1067,7 @@ def check_map(here):
     저장된 그림 중에서 지금 화면과 같은 것을 찾아 그 이름으로 바꾼다 (다른 방 길로 걷는 일을 막는다).
     """
     TITLES.mkdir(parents=True, exist_ok=True)
+    began = time.monotonic()
     title = None
     for _ in range(20):
         title = wind.snapshot("map_name")
@@ -1079,8 +1080,11 @@ def check_map(here):
     mine = TITLES / f"{here}.bin"
     # 아는 맵 이름과 안 맞으면 바로 판단하지 않고 10초까지 다시 읽는다. 한 시간마다 뜨는 "N시간 동안 플레이하였습니다"
     # 안내 상자가 맵 이름을 몇 초 덮는다 (2026-10-12 03:57, 05:57에 이것 때문에 오류가 났다)
+    stable = time.monotonic() - began
     for retry in range(26):
         if mine.exists() and wind.same_title(mine.read_bytes(), title):
+            if time.monotonic() - began > 2:  # 10-16 10:30에 30초 걸린 원인을 찾는 중
+                print(f"   맵 확인 자세히: 그림이 멈추길 기다린 {stable:.1f}초, 다시 읽기 {retry}번", flush=True)
             return here
         other = wind.title_name(title, TITLES)  # 모니터 색 설정에 따라 픽셀이 조금 다를 수 있어 바이트를 그대로 견주지 않는다
         if other:
@@ -1088,6 +1092,10 @@ def check_map(here):
             return other
         if not mine.exists() or retry == 25:
             break
+        if retry in (0, 5, 15) and mine.exists():
+            import numpy as np
+            a = np.frombuffer(mine.read_bytes()[:len(title)], np.uint8).astype(int); b = np.frombuffer(title, np.uint8).astype(int)
+            print(f"   {time.strftime('%H:%M:%S')} 맵 이름이 {here}와 안 맞는다 (다시 읽기 {retry}번째, 최대 차이 {int(abs(a - b).max())}, 8 넘는 바이트 {int((abs(a - b) > 8).sum())})", flush=True)
         if wind.close_notice():
             print(f"   {time.strftime('%H:%M:%S')} 맵 이름을 덮은 알림 띠를 닫았다", flush=True)
         time.sleep(0.4)
